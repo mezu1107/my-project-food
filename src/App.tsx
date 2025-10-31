@@ -20,6 +20,10 @@ import AdminUsers from "./pages/admin/Users";
 import AdminRiders from "./pages/admin/Riders";
 import AdminDeals from "./pages/admin/Deals";
 import AdminFoodItems from "./pages/admin/FoodItems";
+import AdminLogin from "./pages/admin/Login";
+import RiderLayout from "./components/rider/RiderLayout";
+import RiderDashboard from "./pages/rider/Dashboard";
+import RiderLogin from "./pages/rider/Login";
 
 const queryClient = new QueryClient();
 
@@ -41,6 +45,7 @@ const App = () => (
           <Route path="/portfolio" element={<Portfolio />} />
           
           {/* Admin Routes */}
+          <Route path="/admin/login" element={<AdminLogin />} />
           <Route path="/admin" element={<AdminLayout />}>
             <Route index element={<AdminDashboard />} />
             <Route path="orders" element={<AdminOrders />} />
@@ -48,6 +53,13 @@ const App = () => (
             <Route path="riders" element={<AdminRiders />} />
             <Route path="deals" element={<AdminDeals />} />
             <Route path="food-items" element={<AdminFoodItems />} />
+          </Route>
+
+          {/* Rider Routes */}
+          <Route path="/rider/login" element={<RiderLogin />} />
+          <Route path="/rider" element={<RiderLayout />}>
+            <Route index element={<RiderDashboard />} />
+            <Route path="deliveries" element={<RiderDashboard />} />
           </Route>
           
           <Route path="*" element={<NotFound />} />

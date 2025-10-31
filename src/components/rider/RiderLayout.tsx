@@ -1,0 +1,75 @@
+import { Link, Outlet, useLocation } from "react-router-dom";
+import { LayoutDashboard, Package, LogOut, Bike } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { useStore } from "@/lib/store";
+import { useNavigate } from "react-router-dom";
+
+const RiderLayout = () => {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { currentUser, setCurrentUser } = useStore();
+
+  const handleLogout = () => {
+    setCurrentUser(null);
+    navigate("/rider/login");
+  };
+
+  const navItems = [
+    { icon: LayoutDashboard, label: "Dashboard", path: "/rider" },
+    { icon: Package, label: "My Deliveries", path: "/rider/deliveries" },
+  ];
+
+  return (
+    <div className="flex min-h-screen bg-background">
+      {/* Sidebar */}
+      <aside className="w-64 border-r bg-card">
+        <div className="flex h-16 items-center justify-center border-b px-6">
+          <Bike className="h-6 w-6 text-primary mr-2" />
+          <h1 className="text-xl font-bold text-primary">Rider Portal</h1>
+        </div>
+        <nav className="space-y-2 p-4">
+          {navItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = location.pathname === item.path;
+            return (
+              <Link key={item.path} to={item.path}>
+                <Button
+                  variant={isActive ? "default" : "ghost"}
+                  className="w-full justify-start"
+                >
+                  <Icon className="mr-2 h-4 w-4" />
+                  {item.label}
+                </Button>
+              </Link>
+            );
+          })}
+        </nav>
+        <div className="absolute bottom-4 left-4 right-4">
+          <Button variant="outline" className="w-full" onClick={handleLogout}>
+            <LogOut className="mr-2 h-4 w-4" />
+            Logout
+          </Button>
+        </div>
+      </aside>
+
+      {/* Main Content */}
+      <main className="flex-1 overflow-y-auto">
+        <header className="flex h-16 items-center justify-between border-b bg-card px-6">
+          <h2 className="text-lg font-semibold">
+            {navItems.find((item) => item.path === location.pathname)?.label || "Rider Panel"}
+          </h2>
+          <div className="flex items-center gap-4">
+            <span className="text-sm text-muted-foreground">
+              Welcome, {currentUser?.name || "Rider"}
+            </span>
+          </div>
+        </header>
+        <div className="p-6">
+          <Outlet />
+        </div>
+      </main>
+    </div>
+  );
+};
+
+export default RiderLayout;
