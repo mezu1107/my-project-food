@@ -8,42 +8,42 @@ All colors MUST be HSL.
 
 @layer base {
   :root {
-    /* AM Foods Restaurant Theme - Warm & Inviting */
-    --background: 43 46% 97%;
-    --foreground: 25 25% 20%;
+    /* Black & Golden Theme */
+    --background: 0 0% 5%;
+    --foreground: 0 0% 98%;
 
-    --card: 0 0% 100%;
-    --card-foreground: 25 25% 20%;
+    --card: 0 0% 10%;
+    --card-foreground: 0 0% 98%;
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 25 25% 20%;
+    --popover: 0 0% 10%;
+    --popover-foreground: 0 0% 98%;
 
-    --primary: 12 76% 61%;
+    --primary: 0 84% 60%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 43 46% 91%;
-    --secondary-foreground: 25 25% 20%;
+    --secondary: 45 100% 50%;
+    --secondary-foreground: 0 0% 0%;
 
-    --muted: 43 30% 94%;
-    --muted-foreground: 25 15% 45%;
+    --muted: 0 0% 15%;
+    --muted-foreground: 0 0% 60%;
 
-    --accent: 43 74% 66%;
-    --accent-foreground: 25 25% 20%;
+    --accent: 45 100% 50%;
+    --accent-foreground: 0 0% 0%;
 
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 43 30% 88%;
-    --input: 43 30% 88%;
-    --ring: 12 76% 61%;
+    --border: 0 0% 20%;
+    --input: 0 0% 20%;
+    --ring: 45 100% 50%;
 
     --radius: 0.75rem;
     
     /* Custom restaurant tokens */
-    --golden: 43 74% 66%;
-    --cream: 43 46% 91%;
-    --terracotta: 12 76% 61%;
-    --warm-shadow: 12 76% 61% / 0.15;
+    --golden: 45 100% 50%;
+    --cream: 45 100% 95%;
+    --terracotta: 0 84% 60%;
+    --warm-shadow: 45 100% 50% / 0.25;
 
     --sidebar-background: 0 0% 98%;
 
@@ -63,41 +63,41 @@ All colors MUST be HSL.
   }
 
   .dark {
-    --background: 25 30% 12%;
-    --foreground: 43 46% 95%;
+    --background: 0 0% 5%;
+    --foreground: 0 0% 98%;
 
-    --card: 25 25% 15%;
-    --card-foreground: 43 46% 95%;
+    --card: 0 0% 10%;
+    --card-foreground: 0 0% 98%;
 
-    --popover: 25 25% 15%;
-    --popover-foreground: 43 46% 95%;
+    --popover: 0 0% 10%;
+    --popover-foreground: 0 0% 98%;
 
-    --primary: 12 76% 61%;
+    --primary: 0 84% 60%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 25 20% 22%;
-    --secondary-foreground: 43 46% 95%;
+    --secondary: 45 100% 50%;
+    --secondary-foreground: 0 0% 0%;
 
-    --muted: 25 20% 22%;
-    --muted-foreground: 43 30% 65%;
+    --muted: 0 0% 15%;
+    --muted-foreground: 0 0% 60%;
 
-    --accent: 43 74% 56%;
-    --accent-foreground: 0 0% 100%;
+    --accent: 45 100% 50%;
+    --accent-foreground: 0 0% 0%;
 
     --destructive: 0 62.8% 50.6%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 25 20% 25%;
-    --input: 25 20% 25%;
-    --ring: 12 76% 61%;
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --border: 0 0% 20%;
+    --input: 0 0% 20%;
+    --ring: 45 100% 50%;
+    --sidebar-background: 0 0% 8%;
+    --sidebar-foreground: 0 0% 98%;
+    --sidebar-primary: 45 100% 50%;
+    --sidebar-primary-foreground: 0 0% 0%;
+    --sidebar-accent: 0 0% 15%;
+    --sidebar-accent-foreground: 0 0% 98%;
+    --sidebar-border: 0 0% 20%;
+    --sidebar-ring: 45 100% 50%;
   }
 }
 
@@ -122,5 +122,31 @@ All colors MUST be HSL.
   
   .gradient-golden {
     background: linear-gradient(135deg, hsl(var(--golden)), hsl(var(--cream)));
+  }
+  
+  @keyframes rotate-plate {
+    0% {
+      transform: rotate(0deg);
+    }
+    100% {
+      transform: rotate(360deg);
+    }
+  }
+  
+  @keyframes rotate-text {
+    0% {
+      transform: rotate(0deg);
+    }
+    100% {
+      transform: rotate(360deg);
+    }
+  }
+  
+  .animate-rotate-slow {
+    animation: rotate-plate 20s linear infinite;
+  }
+  
+  .animate-rotate-text {
+    animation: rotate-text 10s linear infinite;
   }
 }

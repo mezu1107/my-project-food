@@ -40,78 +40,114 @@ export const Home = () => {
       <Header />
 
       {/* Hero Section */}
-      <section className="relative overflow-hidden bg-gradient-to-br from-primary/10 via-background to-accent/10">
+      <section className="relative overflow-hidden bg-background">
         <div className="container mx-auto px-4 py-20">
           <div className="grid md:grid-cols-2 gap-12 items-center">
+            {/* Left Side - Rotating Plate */}
             <motion.div
               initial={{ opacity: 0, x: -50 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.6 }}
+              className="relative flex items-center justify-center"
             >
-              <h1 className="text-4xl md:text-6xl font-bold mb-6 leading-tight">
-                Bringing Pakistani
-                <span className="text-primary block">Taste to Your Table</span>
-              </h1>
-              <p className="text-lg text-muted-foreground mb-8">
-                Experience authentic Pakistani cuisine delivered fresh to your doorstep. 
-                Order now and taste the tradition!
-              </p>
-              <div className="flex flex-wrap gap-4">
-                <Button size="lg" asChild className="shadow-warm">
-                  <Link to="/menu">
-                    Order Now
-                    <ArrowRight className="ml-2 h-5 w-5" />
-                  </Link>
-                </Button>
-                <Button size="lg" variant="outline" asChild>
-                  <Link to="/menu">Browse Menu</Link>
-                </Button>
-              </div>
-
-              <div className="grid grid-cols-3 gap-6 mt-12">
-                <div className="text-center">
-                  <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-primary/10 mb-2">
-                    <Clock className="h-6 w-6 text-primary" />
-                  </div>
-                  <p className="text-sm font-medium">Fast Delivery</p>
-                  <p className="text-xs text-muted-foreground">30-45 mins</p>
-                </div>
-                <div className="text-center">
-                  <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-primary/10 mb-2">
-                    <ChefHat className="h-6 w-6 text-primary" />
-                  </div>
-                  <p className="text-sm font-medium">Expert Chefs</p>
-                  <p className="text-xs text-muted-foreground">Authentic recipes</p>
-                </div>
-                <div className="text-center">
-                  <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-primary/10 mb-2">
-                    <MapPin className="h-6 w-6 text-primary" />
-                  </div>
-                  <p className="text-sm font-medium">Wide Coverage</p>
-                  <p className="text-xs text-muted-foreground">7+ areas</p>
+              <div className="relative w-[400px] h-[400px]">
+                {/* Rotating Plate */}
+                <div className="absolute inset-0 animate-rotate-slow">
+                  <img
+                    src="https://images.unsplash.com/photo-1585937421612-70a008356fbe?w=800"
+                    alt="Delicious Pakistani Food"
+                    className="rounded-full w-full h-full object-cover border-8 border-golden/20"
+                  />
                 </div>
               </div>
             </motion.div>
 
+            {/* Center - Text Content */}
+            <motion.div
+              initial={{ opacity: 0, y: 30 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.2 }}
+              className="text-center"
+            >
+              <h1 className="text-5xl md:text-7xl font-bold mb-6 leading-tight">
+                <span className="text-foreground">SUPER</span>
+                <span className="text-primary animate-pulse">CASHBACK</span>
+              </h1>
+              <p className="text-lg text-muted-foreground mb-8">
+                up to 30% cashback on all orders
+              </p>
+              
+              <div className="flex flex-col gap-4 items-center mb-8">
+                <div className="flex gap-4">
+                  <input
+                    type="text"
+                    placeholder="Your Town or Area"
+                    className="px-6 py-3 rounded-lg bg-card border border-border text-foreground w-80"
+                  />
+                  <Button size="lg" className="bg-primary hover:bg-primary/90 text-primary-foreground">
+                    SEARCH
+                  </Button>
+                </div>
+                
+                <div className="flex gap-4 items-center">
+                  <Button variant="secondary" size="lg" className="bg-secondary text-secondary-foreground">
+                    Redeem a voucher
+                  </Button>
+                  <div className="w-12 h-12 bg-card border border-border rounded-lg flex items-center justify-center">
+                    <span className="text-2xl">📱</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex gap-4 items-center justify-center">
+                <Button variant="outline" size="lg" className="bg-background text-foreground border-border">
+                  GET THE APP
+                </Button>
+                <div className="flex gap-2">
+                  <div className="w-10 h-10 bg-card border border-border rounded-lg flex items-center justify-center">
+                    <span className="text-xl">🍎</span>
+                  </div>
+                  <div className="w-10 h-10 bg-card border border-border rounded-lg flex items-center justify-center">
+                    <span className="text-xl">▶️</span>
+                  </div>
+                  <div className="w-10 h-10 bg-card border border-border rounded-lg flex items-center justify-center">
+                    <span className="text-xl">📱</span>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+
+            {/* Right Side - Phone Mockup */}
             <motion.div
               initial={{ opacity: 0, x: 50 }}
               animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.6, delay: 0.2 }}
-              className="relative"
+              transition={{ duration: 0.6, delay: 0.4 }}
+              className="relative hidden lg:block"
             >
-              <img
-                src="https://images.unsplash.com/photo-1585937421612-70a008356fbe?w=800"
-                alt="Delicious Pakistani Food"
-                className="rounded-2xl shadow-2xl w-full"
-              />
-              <div className="absolute -bottom-6 -left-6 bg-card p-6 rounded-xl shadow-warm">
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-full bg-accent flex items-center justify-center">
-                    <Star className="h-6 w-6 text-accent-foreground fill-current" />
-                  </div>
-                  <div>
-                    <p className="text-2xl font-bold">4.8</p>
-                    <p className="text-xs text-muted-foreground">1000+ Reviews</p>
+              <div className="relative">
+                <div className="w-[300px] h-[600px] bg-gradient-to-b from-card to-muted rounded-[3rem] border-8 border-foreground/20 shadow-2xl overflow-hidden">
+                  <div className="absolute top-0 left-0 right-0 h-8 bg-background/50 rounded-t-[2.5rem]"></div>
+                  <div className="p-6 pt-12">
+                    <div className="text-center mb-4">
+                      <h3 className="text-2xl font-bold text-primary">SUPERMEAL</h3>
+                      <p className="text-xs text-muted-foreground">up to 30% cashback on all orders</p>
+                    </div>
+                    <div className="bg-background/80 rounded-lg p-4 mb-4">
+                      <div className="flex items-center gap-2 text-sm">
+                        <MapPin className="h-4 w-4 text-primary" />
+                        <span className="text-foreground">Hancock Road, Birmingham</span>
+                      </div>
+                    </div>
+                    <Button className="w-full bg-secondary text-secondary-foreground mb-4">
+                      Redeem a voucher
+                    </Button>
+                    <div className="mt-8">
+                      <div className="relative">
+                        <div className="absolute -bottom-4 -right-4 w-24 h-24 bg-secondary rounded-full flex items-center justify-center transform rotate-12">
+                          <span className="text-3xl font-bold text-secondary-foreground">💰</span>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
