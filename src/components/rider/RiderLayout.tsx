@@ -45,7 +45,11 @@ const RiderLayout = () => {
           })}
         </nav>
         <div className="absolute bottom-4 left-4 right-4">
-          <Button variant="outline" className="w-full" onClick={handleLogout}>
+          <Button 
+            variant="outline" 
+            className="w-full border-primary/30 hover:bg-primary/10 hover:border-primary" 
+            onClick={handleLogout}
+          >
             <LogOut className="mr-2 h-4 w-4" />
             Logout
           </Button>
