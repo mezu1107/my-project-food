@@ -91,6 +91,256 @@ export type Database = {
           },
         ]
       }
+      order_items: {
+        Row: {
+          addons: Json | null
+          created_at: string
+          id: string
+          menu_item_id: string
+          menu_item_name: string
+          menu_item_price: number
+          order_id: string
+          quantity: number
+          subtotal: number
+        }
+        Insert: {
+          addons?: Json | null
+          created_at?: string
+          id?: string
+          menu_item_id: string
+          menu_item_name: string
+          menu_item_price: number
+          order_id: string
+          quantity: number
+          subtotal: number
+        }
+        Update: {
+          addons?: Json | null
+          created_at?: string
+          id?: string
+          menu_item_id?: string
+          menu_item_name?: string
+          menu_item_price?: number
+          order_id?: string
+          quantity?: number
+          subtotal?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "order_items_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      order_status_history: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          notes: string | null
+          order_id: string
+          status: Database["public"]["Enums"]["order_status"]
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          notes?: string | null
+          order_id: string
+          status: Database["public"]["Enums"]["order_status"]
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          notes?: string | null
+          order_id?: string
+          status?: Database["public"]["Enums"]["order_status"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "order_status_history_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      orders: {
+        Row: {
+          address_id: string | null
+          auto_cancel_at: string | null
+          bank_reference_number: string | null
+          cancellation_reason: string | null
+          cancelled_at: string | null
+          created_at: string
+          delivered_at: string | null
+          delivery_address: string
+          delivery_area: string
+          delivery_fee: number
+          delivery_floor: string | null
+          delivery_instructions: string | null
+          delivery_lat: number | null
+          delivery_lng: number | null
+          discount_amount: number | null
+          estimated_delivery_time: string | null
+          guest_email: string | null
+          guest_name: string | null
+          guest_phone: string | null
+          id: string
+          payment_completed_at: string | null
+          payment_method: Database["public"]["Enums"]["payment_method"]
+          payment_status: Database["public"]["Enums"]["payment_status"]
+          promo_code_id: string | null
+          rider_assigned_at: string | null
+          rider_id: string | null
+          short_id: string
+          status: Database["public"]["Enums"]["order_status"]
+          stripe_payment_intent_id: string | null
+          subtotal: number
+          total: number
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          address_id?: string | null
+          auto_cancel_at?: string | null
+          bank_reference_number?: string | null
+          cancellation_reason?: string | null
+          cancelled_at?: string | null
+          created_at?: string
+          delivered_at?: string | null
+          delivery_address: string
+          delivery_area: string
+          delivery_fee?: number
+          delivery_floor?: string | null
+          delivery_instructions?: string | null
+          delivery_lat?: number | null
+          delivery_lng?: number | null
+          discount_amount?: number | null
+          estimated_delivery_time?: string | null
+          guest_email?: string | null
+          guest_name?: string | null
+          guest_phone?: string | null
+          id?: string
+          payment_completed_at?: string | null
+          payment_method: Database["public"]["Enums"]["payment_method"]
+          payment_status?: Database["public"]["Enums"]["payment_status"]
+          promo_code_id?: string | null
+          rider_assigned_at?: string | null
+          rider_id?: string | null
+          short_id: string
+          status?: Database["public"]["Enums"]["order_status"]
+          stripe_payment_intent_id?: string | null
+          subtotal: number
+          total: number
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          address_id?: string | null
+          auto_cancel_at?: string | null
+          bank_reference_number?: string | null
+          cancellation_reason?: string | null
+          cancelled_at?: string | null
+          created_at?: string
+          delivered_at?: string | null
+          delivery_address?: string
+          delivery_area?: string
+          delivery_fee?: number
+          delivery_floor?: string | null
+          delivery_instructions?: string | null
+          delivery_lat?: number | null
+          delivery_lng?: number | null
+          discount_amount?: number | null
+          estimated_delivery_time?: string | null
+          guest_email?: string | null
+          guest_name?: string | null
+          guest_phone?: string | null
+          id?: string
+          payment_completed_at?: string | null
+          payment_method?: Database["public"]["Enums"]["payment_method"]
+          payment_status?: Database["public"]["Enums"]["payment_status"]
+          promo_code_id?: string | null
+          rider_assigned_at?: string | null
+          rider_id?: string | null
+          short_id?: string
+          status?: Database["public"]["Enums"]["order_status"]
+          stripe_payment_intent_id?: string | null
+          subtotal?: number
+          total?: number
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "orders_address_id_fkey"
+            columns: ["address_id"]
+            isOneToOne: false
+            referencedRelation: "user_addresses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_promo_code_id_fkey"
+            columns: ["promo_code_id"]
+            isOneToOne: false
+            referencedRelation: "promo_codes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      promo_codes: {
+        Row: {
+          code: string
+          created_at: string
+          discount_type: string
+          discount_value: number
+          id: string
+          is_active: boolean | null
+          max_discount_amount: number | null
+          min_order_amount: number | null
+          updated_at: string
+          usage_limit: number | null
+          used_count: number | null
+          valid_from: string
+          valid_until: string | null
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          discount_type: string
+          discount_value: number
+          id?: string
+          is_active?: boolean | null
+          max_discount_amount?: number | null
+          min_order_amount?: number | null
+          updated_at?: string
+          usage_limit?: number | null
+          used_count?: number | null
+          valid_from?: string
+          valid_until?: string | null
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          discount_type?: string
+          discount_value?: number
+          id?: string
+          is_active?: boolean | null
+          max_discount_amount?: number | null
+          min_order_amount?: number | null
+          updated_at?: string
+          usage_limit?: number | null
+          used_count?: number | null
+          valid_from?: string
+          valid_until?: string | null
+        }
+        Relationships: []
+      }
       spatial_ref_sys: {
         Row: {
           auth_name: string | null
@@ -371,6 +621,8 @@ export type Database = {
           }
       enablelongtransactions: { Args: never; Returns: string }
       equals: { Args: { geom1: unknown; geom2: unknown }; Returns: boolean }
+      generate_bank_reference: { Args: never; Returns: string }
+      generate_short_order_id: { Args: never; Returns: string }
       geometry: { Args: { "": string }; Returns: unknown }
       geometry_above: {
         Args: { geom1: unknown; geom2: unknown }
@@ -1105,7 +1357,21 @@ export type Database = {
       }
     }
     Enums: {
-      [_ in never]: never
+      order_status:
+        | "pending"
+        | "pending_payment"
+        | "confirmed"
+        | "preparing"
+        | "out_for_delivery"
+        | "delivered"
+        | "cancelled"
+      payment_method:
+        | "cod"
+        | "easypaisa"
+        | "jazzcash"
+        | "bank_transfer"
+        | "card"
+      payment_status: "pending" | "completed" | "failed" | "cancelled"
     }
     CompositeTypes: {
       geometry_dump: {
@@ -1240,6 +1506,18 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      order_status: [
+        "pending",
+        "pending_payment",
+        "confirmed",
+        "preparing",
+        "out_for_delivery",
+        "delivered",
+        "cancelled",
+      ],
+      payment_method: ["cod", "easypaisa", "jazzcash", "bank_transfer", "card"],
+      payment_status: ["pending", "completed", "failed", "cancelled"],
+    },
   },
 } as const
