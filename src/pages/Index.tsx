@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { ServiceAreaModal } from "@/components/ServiceAreaModal";
+import ServiceAreaModal from "@/components/ServiceAreaModal"; // default import
 import Home from "./Home";
 import { useStore } from "@/lib/store";
 
@@ -15,8 +15,11 @@ const Index = () => {
 
   return (
     <>
-      <ServiceAreaModal isOpen={showAreaModal} onClose={() => setShowAreaModal(false)} />
-      <Home />
+      <ServiceAreaModal
+        isOpen={showAreaModal}
+        onClose={() => setShowAreaModal(false)}
+      />
+      <Home openAreaChecker={() => setShowAreaModal(true)} />
     </>
   );
 };

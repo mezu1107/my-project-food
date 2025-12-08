@@ -1,22 +1,26 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
-import { ChefHat, Clock, MapPin, Star, ArrowRight } from "lucide-react";
+import { MapPin, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MenuItemCard } from "@/components/MenuItemCard";
 import { mockMenuItems } from "@/lib/mockData";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 
-export const Home = () => {
+interface HomeProps {
+  openAreaChecker: () => void;
+}
+
+export const Home: React.FC<HomeProps> = ({ openAreaChecker }) => {
   const featuredItems = mockMenuItems.filter((item) => item.featured);
-  
+
   const promotionalTexts = [
     { main: "CASHBACK", sub: "up to 30% cashback on all orders" },
     { main: "FREE DELIVERY", sub: "Free delivery on orders above Rs. 500" },
     { main: "SPECIAL DISCOUNT", sub: "Get 20% off on your first order" },
   ];
-  
+
   const [currentPromoIndex, setCurrentPromoIndex] = useState(0);
 
   useEffect(() => {
@@ -26,6 +30,7 @@ export const Home = () => {
 
     return () => clearInterval(interval);
   }, []);
+
   const categories = [
     { name: "Breakfast", icon: "🍳", link: "/menu?category=breakfast" },
     { name: "Lunch", icon: "🍛", link: "/menu?category=lunch" },
@@ -89,7 +94,9 @@ export const Home = () => {
               <div className="p-6 pt-12">
                 <div className="text-center mb-4">
                   <h3 className="text-2xl font-bold text-primary">SUPERMEAL</h3>
-                  <p className="text-xs text-muted-foreground">up to 30% cashback on all orders</p>
+                  <p className="text-xs text-muted-foreground">
+                    up to 30% cashback on all orders
+                  </p>
                 </div>
                 <div className="bg-background/80 rounded-lg p-4 mb-4">
                   <div className="flex items-center gap-2 text-sm">
@@ -122,7 +129,7 @@ export const Home = () => {
           >
             <h1 className="text-6xl md:text-8xl font-bold mb-6 leading-tight">
               <span className="text-foreground">SUPER</span>
-              <motion.span 
+              <motion.span
                 key={currentPromoIndex}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -133,7 +140,7 @@ export const Home = () => {
                 {promotionalTexts[currentPromoIndex].main}
               </motion.span>
             </h1>
-            <motion.p 
+            <motion.p
               key={`sub-${currentPromoIndex}`}
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -142,7 +149,7 @@ export const Home = () => {
             >
               {promotionalTexts[currentPromoIndex].sub}
             </motion.p>
-            
+
             <div className="flex flex-col gap-6 items-center mb-12">
               <div className="flex gap-4 w-full max-w-2xl">
                 <div className="flex-1 relative">
@@ -153,13 +160,30 @@ export const Home = () => {
                     className="w-full px-12 py-4 rounded-lg bg-card border border-border text-foreground text-lg"
                   />
                 </div>
-                <Button size="lg" className="bg-primary hover:bg-primary/90 text-primary-foreground px-12 py-4 text-lg">
+                <Button
+                  size="lg"
+                  className="bg-primary hover:bg-primary/90 text-primary-foreground px-12 py-4 text-lg"
+                >
                   SEARCH
                 </Button>
               </div>
-              
+
+              {/* Example usage of openAreaChecker */}
+              <Button
+                size="lg"
+                variant="secondary"
+                className="mt-6"
+                onClick={openAreaChecker}
+              >
+                Change Delivery Area
+              </Button>
+
               <div className="flex gap-4 items-center">
-                <Button variant="secondary" size="lg" className="bg-secondary text-secondary-foreground px-8">
+                <Button
+                  variant="secondary"
+                  size="lg"
+                  className="bg-secondary text-secondary-foreground px-8"
+                >
                   Redeem a voucher
                 </Button>
                 <div className="w-14 h-14 bg-card border-2 border-border rounded-lg flex items-center justify-center">
@@ -169,7 +193,10 @@ export const Home = () => {
             </div>
 
             <div className="flex gap-6 items-center justify-center flex-wrap">
-              <Button size="lg" className="bg-background text-foreground border-2 border-border hover:bg-card px-8">
+              <Button
+                size="lg"
+                className="bg-background text-foreground border-2 border-border hover:bg-card px-8"
+              >
                 GET THE APP
               </Button>
               <div className="flex gap-3">
@@ -300,9 +327,7 @@ export const Home = () => {
           viewport={{ once: true }}
           className="gradient-primary rounded-2xl p-12 text-center text-white"
         >
-          <h2 className="text-3xl md:text-4xl font-bold mb-4">
-            Ready to Order?
-          </h2>
+          <h2 className="text-3xl md:text-4xl font-bold mb-4">Ready to Order?</h2>
           <p className="text-lg mb-8 opacity-90 max-w-2xl mx-auto">
             Discover your digital health score and order your favorite Pakistani dishes today!
           </p>

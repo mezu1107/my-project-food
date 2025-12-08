@@ -284,16 +284,19 @@ export const mockRiders: Rider[] = [
   },
 ];
 
-export const serviceAreas = [
-  "Lahore - Gulberg",
-  "Lahore - DHA",
-  "Lahore - Johar Town",
-  "Karachi - Clifton",
-  "Karachi - DHA",
-  "Islamabad - F-7",
-  "Islamabad - G-10",
-];
-
+// src/lib/mockData.ts
+// export const serviceAreas = [
+//   "Gulberg, Lahore",
+//   "DHA Phase 5, Lahore",
+//   "Johar Town, Lahore",
+//   "Model Town, Lahore",
+//   "Defence, Karachi",
+//   "Clifton, Karachi",
+//   "Gulshan-e-Iqbal, Karachi",
+//   "F-7, Islamabad",
+//   "F-10, Islamabad",
+//   "Blue Area, Islamabad",
+// ];
 export const mockDeals: Deal[] = [
   {
     id: "deal-1",
