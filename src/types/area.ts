@@ -3,7 +3,7 @@
 // === GeoJSON Types ===
 export interface GeoPoint {
   type: "Point";
-  coordinates: [number, number]; // [longitude, latitude] — MongoDB standard
+  coordinates: [number, number]; // [lng, lat]
 }
 
 export interface GeoPolygon {
@@ -22,24 +22,36 @@ export interface DeliveryZone {
   updatedAt: string;
 }
 
-// === Area Model (with frontend virtuals) ===
+// === Area Types ===
 export interface Area {
   _id: string;
   name: string;
   city: string;
   center: GeoPoint;
-  centerLatLng: { lat: number; lng: number }; // Virtual: computed on backend
-  polygon?: GeoPolygon;
+  polygon: GeoPolygon;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface AreaWithCenter {
+  _id: string;
+  name: string;
+  city: string;
+  centerLatLng: { lat: number; lng: number };
+  isActive: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+
+  // THIS IS THE MISSING PART — CRITICAL!
   deliveryZone?: DeliveryZone | null;
+  hasDeliveryZone?: boolean;
 }
 
 // === API Response Types ===
 export interface AreasResponse {
   success: boolean;
-  areas: Area[];
+  areas: AreaWithCenter[];
   pagination?: {
     total: number;
     page: number;
@@ -48,7 +60,6 @@ export interface AreasResponse {
   };
 }
 
-// src/types/area.ts
 export interface CheckAreaResponse {
   success: boolean;
   inService: boolean;
@@ -57,7 +68,7 @@ export interface CheckAreaResponse {
     _id: string;
     name: string;
     city: string;
-    center: { lat: number; lng: number }; // from centerLatLng virtual
+    center: { lat: number; lng: number };
   };
   delivery?: {
     fee: number;

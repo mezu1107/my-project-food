@@ -5,11 +5,15 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { CheckCircle, Clock, MapPin, Truck, ChefHat, Package } from 'lucide-react';
+import { CheckCircle, Clock, MapPin, Truck, ChefHat, Package, XCircle } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { useOrder } from '@/features/orders/hooks/useOrders';
 import { useOrderSocket } from '@/features/orders/hooks/useOrderSocket';
-import { ORDER_STATUS_LABELS, ORDER_STATUS_COLORS, type Order } from '@/types/order.types';
+import {
+  ORDER_STATUS_LABELS,
+  ORDER_STATUS_COLORS,
+  type Order,
+} from '@/types/order.types';
 import { Skeleton } from '@/components/ui/skeleton';
 
 const STEPS = [
@@ -22,25 +26,57 @@ const STEPS = [
 
 export default function OrderSuccessPage() {
   const { orderId } = useParams<{ orderId: string }>();
-  const { data, isLoading } = useOrder(orderId!); // data: OrderResponse | undefined
+
+  if (!orderId) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4">
+        <Card className="max-w-md w-full text-center p-8">
+          <XCircle className="h-16 w-16 text-red-600 mx-auto mb-4" />
+          <h2 className="text-2xl font-bold mb-3">Invalid Order</h2>
+          <p className="text-muted-foreground mb-6">
+            No order ID provided in the URL.
+          </p>
+          <Button asChild>
+            <Link to="/orders">View Orders</Link>
+          </Button>
+        </Card>
+      </div>
+    );
+  }
+
+  // Fetch order using custom hook
+  const { data: order, isLoading } = useOrder(orderId);
+
+  // Subscribe to real-time updates
   useOrderSocket(orderId);
 
-  // Correct type: data?.order is of type Order
-  const order: Order | undefined = data?.order;
-
-  // Celebrate delivered orders
+  // Trigger confetti on delivery
   useEffect(() => {
     if (order?.status === 'delivered') {
-      confetti({
-        particleCount: 150,
-        spread: 100,
-        origin: { y: 0.6 },
-      });
+      confetti({ particleCount: 150, spread: 100, origin: { y: 0.6 } });
     }
   }, [order?.status]);
 
-  if (isLoading) return <Skeleton className="h-96 w-full mx-auto" />;
-  if (!order) return <div className="text-center py-20">Order not found</div>;
+  if (isLoading) {
+    return <Skeleton className="h-96 w-full mx-auto mt-8 rounded-xl" />;
+  }
+
+  if (!order) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4">
+        <Card className="max-w-md w-full text-center p-8">
+          <XCircle className="h-16 w-16 text-red-600 mx-auto mb-4" />
+          <h2 className="text-2xl font-bold mb-3">Order Not Found</h2>
+          <p className="text-muted-foreground mb-6">
+            We couldn't find this order. It may have been removed or the link is invalid.
+          </p>
+          <Button asChild>
+            <Link to="/orders">View Orders</Link>
+          </Button>
+        </Card>
+      </div>
+    );
+  }
 
   const currentStep = STEPS.findIndex((s) => s.status === order.status);
   const isCancelled = ['cancelled', 'rejected'].includes(order.status);
@@ -52,14 +88,21 @@ export default function OrderSuccessPage() {
         {/* Header */}
         <div className="text-center py-8">
           <div
-            className={`inline-flex items-center justify-center w-20 h-20 rounded-full mb-4 
-              ${isCancelled ? 'bg-red-100' : order.status === 'delivered' ? 'bg-green-100' : 'bg-primary/10'}`}
+            className={`inline-flex items-center justify-center w-20 h-20 rounded-full mb-4 ${
+              isCancelled
+                ? 'bg-red-100'
+                : order.status === 'delivered'
+                ? 'bg-green-100'
+                : 'bg-primary/10'
+            }`}
           >
-            {isCancelled
-              ? 'Failed'
-              : order.status === 'delivered'
-              ? 'Success'
-              : <CheckCircle className="h-12 w-12 text-primary" />}
+            {isCancelled ? (
+              <XCircle className="h-12 w-12 text-red-600" />
+            ) : order.status === 'delivered' ? (
+              <CheckCircle className="h-12 w-12 text-green-600" />
+            ) : (
+              <CheckCircle className="h-12 w-12 text-primary" />
+            )}
           </div>
           <h1 className="text-3xl font-bold">
             {isCancelled
@@ -86,12 +129,17 @@ export default function OrderSuccessPage() {
                     return (
                       <div key={step.status} className="flex flex-col items-center">
                         <div
-                          className={`w-14 h-14 rounded-full flex items-center justify-center text-white font-bold
-                            ${active ? 'bg-primary' : 'bg-muted'}`}
+                          className={`w-14 h-14 rounded-full flex items-center justify-center text-white font-bold ${
+                            active ? 'bg-primary' : 'bg-muted'
+                          }`}
                         >
                           <Icon className="h-7 w-7" />
                         </div>
-                        <p className={`text-xs mt-2 ${active ? 'font-medium' : 'text-muted-foreground'}`}>
+                        <p
+                          className={`text-xs mt-2 ${
+                            active ? 'font-medium' : 'text-muted-foreground'
+                          }`}
+                        >
                           {step.label}
                         </p>
                       </div>
@@ -100,14 +148,14 @@ export default function OrderSuccessPage() {
                 </div>
                 <div className="absolute top-7 left-0 right-0 h-1 bg-muted -z-10">
                   <div
-                    className="h-full bg-primary transition-all"
+                    className="h-full bg-primary transition-all duration-500"
                     style={{ width: `${(currentStep / (STEPS.length - 1)) * 100}%` }}
                   />
                 </div>
               </div>
               {order.estimatedDelivery && currentStep < STEPS.length - 1 && (
                 <p className="text-center mt-6 text-sm">
-                  Estimated: <strong>{order.estimatedDelivery}</strong>
+                  Estimated Delivery: <strong>{order.estimatedDelivery}</strong>
                 </p>
               )}
             </CardContent>
@@ -118,31 +166,41 @@ export default function OrderSuccessPage() {
         <Card>
           <CardContent className="p-6 space-y-6">
             <div>
-              <h3 className="font-bold mb-3">Items</h3>
+              <h3 className="font-bold mb-3">Order Items</h3>
               {order.items.map((item, i) => (
                 <div key={i} className="flex justify-between py-2">
-                  <span>{item.quantity} × {item.name}</span>
+                  <span>
+                    {item.quantity} × {item.menuItem.name}
+                  </span>
                   <span>Rs. {item.priceAtOrder * item.quantity}</span>
                 </div>
               ))}
             </div>
             <Separator />
             <div className="space-y-2 text-sm">
-              <div className="flex justify-between"><span>Subtotal</span><span>Rs. {order.totalAmount}</span></div>
-              <div className="flex justify-between"><span>Delivery</span><span>Rs. {order.deliveryFee}</span></div>
+              <div className="flex justify-between">
+                <span>Subtotal</span>
+                <span>Rs. {order.totalAmount}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Delivery Fee</span>
+                <span>Rs. {order.deliveryFee}</span>
+              </div>
               {order.discountApplied > 0 && (
                 <div className="flex justify-between text-green-600">
-                  <span>Discount</span><span>-Rs. {order.discountApplied}</span>
+                  <span>Discount</span>
+                  <span>-Rs. {order.discountApplied}</span>
                 </div>
               )}
               <div className="flex justify-between font-bold text-lg pt-3 border-t">
-                <span>Total</span><span>Rs. {order.finalAmount}</span>
+                <span>Total Paid</span>
+                <span>Rs. {order.finalAmount}</span>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        {/* Delivery Info */}
+        {/* Delivery Address */}
         <Card>
           <CardContent className="p-6 space-y-4">
             <div className="flex gap-3">
@@ -150,10 +208,12 @@ export default function OrderSuccessPage() {
               <div>
                 <p className="font-medium">Delivery Address</p>
                 <p className="text-sm text-muted-foreground">
-                  {order.addressDetails?.fullAddress ?? 'N/A'}
+                  {order.addressDetails?.fullAddress || 'Not available'}
                 </p>
               </div>
             </div>
+
+            {/* Rider Info */}
             {order.rider && (
               <>
                 <Separator />
@@ -174,16 +234,15 @@ export default function OrderSuccessPage() {
           </CardContent>
         </Card>
 
-        {/* Actions */}
+        {/* Action Buttons */}
         <div className="flex gap-4">
           <Button asChild variant="outline" className="flex-1">
-            <Link to="/orders">All Orders</Link>
+            <Link to="/orders">View All Orders</Link>
           </Button>
           <Button asChild className="flex-1">
             <Link to="/menu">Order Again</Link>
           </Button>
         </div>
-
       </div>
     </div>
   );

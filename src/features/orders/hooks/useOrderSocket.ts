@@ -1,94 +1,142 @@
 // src/features/orders/hooks/useOrderSocket.ts
 import { useEffect, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { initSocket, joinRoom, leaveRoom } from '@/lib/socket';
+import { initSocket, getSocket } from '@/lib/socket';
 import { useAuthStore } from '@/features/auth/store/authStore';
 import { toast } from 'sonner';
-import { ORDER_STATUS_LABELS } from '@/types/order.types';
 import type { Order } from '@/types/order.types';
 
-interface OrderUpdateEvent {
-  event: string;
-  orderId: string;
-  status: string;
-  order: Order;
-  message?: string;
+// Payload for rider location updates
+interface RiderLocationPayload {
+  riderLocation: { lat: number; lng: number };
+  riderId: string;
+  status?: Order['status'];
+}
+
+// Events sent from backend
+interface OrderSocketEvents {
+  orderUpdate: Order; // Full order object
+  orderInit: { orderId: string; status: Order['status']; riderLocation?: { lat: number; lng: number } };
+  riderLocation: RiderLocationPayload;
+  riderLiveUpdate: RiderLocationPayload & { orderId: string };
+  riderOnline: { riderId: string; name: string; phone: string };
+  riderOffline: { riderId: string };
+  error: { message: string };
 }
 
 export const useOrderSocket = (orderId?: string) => {
   const queryClient = useQueryClient();
-  const { token, user, isAuthenticated } = useAuthStore();
+  const { user, isAuthenticated, token } = useAuthStore(); // token from auth store
 
+  // Handle full order updates
   const handleOrderUpdate = useCallback(
-    (data: OrderUpdateEvent) => {
-      const statusLabel = ORDER_STATUS_LABELS[data.status as keyof typeof ORDER_STATUS_LABELS];
-
-      // Update single order cache if orderId exists
-      if (data.orderId) {
-        queryClient.setQueryData(['order', data.orderId], {
-          success: true,
-          order: data.order,
-        });
-      }
-
-      // Always refresh the list of orders
+    (order: Order) => {
+      // Update single order cache
+      queryClient.setQueryData(['order', order._id], { success: true, order });
+      // Refresh my-orders list
       queryClient.invalidateQueries({ queryKey: ['my-orders'] });
 
-      // Toast notifications based on event type
-      switch (data.event) {
-        case 'new_order':
-          toast.success('Order placed successfully!');
+      // Toast for order status
+      switch (order.status) {
+        case 'pending':
+          toast.info('Order pending confirmation');
           break;
-        case 'rider_assigned':
-          toast.success('Rider assigned! Your food is on the way');
+        case 'pending_payment':
+          toast.info('Awaiting payment');
           break;
-        case 'status_updated':
-          if (data.status === 'delivered') {
-            toast.success('Order delivered! Enjoy your meal');
-          } else if (data.status === 'out_for_delivery') {
-            toast.success('Out for delivery!');
-          } else {
-            toast.info(`Order is now: ${statusLabel}`);
-          }
+        case 'confirmed':
+          toast.success('Order confirmed!');
           break;
-        case 'order_cancelled':
-        case 'order_rejected':
-          toast.error(`Order ${data.status === 'cancelled' ? 'cancelled' : 'rejected'}`);
+        case 'preparing':
+          toast.info('Order is being prepared');
           break;
-        default:
-          if (data.message) toast.info(data.message);
+        case 'out_for_delivery':
+          toast.success('Your food is on the way!');
+          break;
+        case 'delivered':
+          toast.success('Order delivered! Enjoy your meal');
+          break;
+        case 'cancelled':
+        case 'rejected':
+          toast.error(`Order ${order.status}`);
+          break;
       }
     },
     [queryClient]
   );
 
+  // Handle rider location updates
+  const handleRiderLocation = useCallback(
+    ({ riderLocation, riderId, status }: RiderLocationPayload) => {
+      // Optional: update live map or local state
+      console.log(`Rider ${riderId} location:`, riderLocation, 'status:', status);
+    },
+    []
+  );
+
+  // Handle initial order payload
+  const handleOrderInit = useCallback(
+    (payload: OrderSocketEvents['orderInit']) => {
+      queryClient.setQueryData(['order', payload.orderId], {
+        success: true,
+        order: { _id: payload.orderId, status: payload.status } as Order,
+      });
+
+      if (payload.riderLocation) {
+        handleRiderLocation({ riderId: '', riderLocation: payload.riderLocation });
+      }
+    },
+    [queryClient, handleRiderLocation]
+  );
+
   useEffect(() => {
-    if (!token && !orderId) return;
+    if (!isAuthenticated) return;
 
-    const socket = initSocket(token);
+    // Initialize or get existing socket
+    const socket = getSocket() || initSocket(token);
 
-    // Join user-specific room for all personal orders
-    if (isAuthenticated && user?._id) {
-      joinRoom(`user:${user._id}`);
-    }
+    // Join personal room for the user
+    if (user?._id) socket.emit('join', `user:${user._id}`);
 
     // Join specific order room for live tracking
     if (orderId) {
-      joinRoom(`order:${orderId}`);
+      socket.emit('trackOrder', { orderId });
     }
 
+    // Listen to socket events
     socket.on('orderUpdate', handleOrderUpdate);
+    socket.on('orderInit', handleOrderInit);
+    socket.on('riderLocation', handleRiderLocation);
+    socket.on('riderLiveUpdate', handleRiderLocation); // Admin can use separate handler
+    socket.on('riderOnline', (payload: OrderSocketEvents['riderOnline']) =>
+      toast.success(`Rider ${payload.name} is online`)
+    );
+    socket.on('riderOffline', (payload: OrderSocketEvents['riderOffline']) =>
+      toast.info(`Rider went offline`)
+    );
+    socket.on('error', (payload: OrderSocketEvents['error']) => toast.error(payload.message));
 
+    // Cleanup on unmount
     return () => {
       socket.off('orderUpdate', handleOrderUpdate);
+      socket.off('orderInit', handleOrderInit);
+      socket.off('riderLocation', handleRiderLocation);
+      socket.off('riderLiveUpdate', handleRiderLocation);
+      socket.off('riderOnline');
+      socket.off('riderOffline');
+      socket.off('error');
 
-      if (isAuthenticated && user?._id) {
-        leaveRoom(`user:${user._id}`);
-      }
-
-      if (orderId) {
-        leaveRoom(`order:${orderId}`);
-      }
+      // Leave rooms
+      if (user?._id) socket.emit('leave', `user:${user._id}`);
+      if (orderId) socket.emit('leave', `order:${orderId}`);
     };
-  }, [token, user?._id, isAuthenticated, orderId, handleOrderUpdate]);
+  }, [
+    isAuthenticated,
+    user?._id,
+    token,
+    orderId,
+    handleOrderUpdate,
+    handleOrderInit,
+    handleRiderLocation,
+  ]);
 };

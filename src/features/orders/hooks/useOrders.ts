@@ -11,9 +11,7 @@ import type {
   OrdersResponse,
 } from '@/types/order.types';
 
-// -----------------------
-// Fetch user's orders
-// -----------------------
+// Fetch user's orders (authenticated only)
 export const useMyOrders = () => {
   const { isAuthenticated } = useAuthStore();
 
@@ -25,13 +23,12 @@ export const useMyOrders = () => {
     },
     enabled: isAuthenticated,
     staleTime: 30_000,
+    refetchOnWindowFocus: true,
   });
 };
 
-// -----------------------
-// Fetch single order by ID
-// -----------------------
-export const useOrder = (orderId: string) => {
+// Fetch single order (for both auth & guest via public tracking)
+export const useOrder = (orderId: string | undefined) => {
   return useQuery<Order>({
     queryKey: ['order', orderId],
     queryFn: async () => {
@@ -42,24 +39,23 @@ export const useOrder = (orderId: string) => {
   });
 };
 
-// -----------------------
 // Track guest orders by phone
-// -----------------------
 export const useTrackOrderByPhone = () => {
-  return useMutation<OrdersResponse, Error, string>({
-    mutationFn: async (phone) => {
+  return useMutation<OrdersResponse, Error, { phone: string }>({
+    mutationFn: async ({ phone }) => {
       const { data } = await api.post<OrdersResponse>('/orders/track/by-phone', { phone });
       return data;
     },
+    onSuccess: () => {
+      toast.success('Orders found!');
+    },
     onError: (error: any) => {
-      toast.error(error.response?.data?.message || 'Failed to track orders');
+      toast.error(error.response?.data?.message || 'No orders found for this number');
     },
   });
 };
 
-// -----------------------
-// Create order (authenticated user)
-// -----------------------
+// Create order — Authenticated User
 export const useCreateOrder = () => {
   const queryClient = useQueryClient();
 
@@ -68,10 +64,9 @@ export const useCreateOrder = () => {
       const { data } = await api.post<OrderResponse>('/orders', payload);
       return data;
     },
-    onSuccess: (data) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['my-orders'] });
       queryClient.removeQueries({ queryKey: ['cart'] });
-      toast.success(data.message || 'Order placed successfully!');
     },
     onError: (error: any) => {
       toast.error(error.response?.data?.message || 'Failed to place order');
@@ -79,17 +74,15 @@ export const useCreateOrder = () => {
   });
 };
 
-// -----------------------
-// Create guest order (no login)
-// -----------------------
+// Create order — Guest User
 export const useCreateGuestOrder = () => {
   return useMutation<OrderResponse, Error, CreateGuestOrderPayload>({
     mutationFn: async (payload) => {
       const { data } = await api.post<OrderResponse>('/orders', payload);
       return data;
     },
-    onSuccess: (data) => {
-      toast.success(data.message || 'Order placed! Check your phone.');
+    onSuccess: () => {
+      // No cache invalidation needed for guest
     },
     onError: (error: any) => {
       toast.error(error.response?.data?.message || 'Failed to place order');
@@ -97,9 +90,7 @@ export const useCreateGuestOrder = () => {
   });
 };
 
-// -----------------------
-// Cancel order
-// -----------------------
+// Cancel order (customer)
 export const useCancelOrder = () => {
   const queryClient = useQueryClient();
 
@@ -119,9 +110,7 @@ export const useCancelOrder = () => {
   });
 };
 
-// -----------------------
-// Confirm bank transfer (upload receipt)
-// -----------------------
+// Confirm bank transfer proof upload
 export const useConfirmBankPayment = () => {
   const queryClient = useQueryClient();
 
@@ -133,16 +122,19 @@ export const useConfirmBankPayment = () => {
       const { data } = await api.post<{ success: true; message: string }>(
         `/orders/${orderId}/confirm-bank`,
         formData,
-        { headers: { 'Content-Type': 'multipart/form-data' } }
+        {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        }
       );
       return data;
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['order'] });
       queryClient.invalidateQueries({ queryKey: ['my-orders'] });
-      toast.success('Payment proof submitted! We’ll confirm soon.');
+      toast.success('Receipt uploaded! We’ll confirm your payment soon.');
     },
     onError: (error: any) => {
-      toast.error(error.response?.data?.message || 'Failed to submit proof');
+      toast.error(error.response?.data?.message || 'Failed to upload receipt');
     },
   });
 };

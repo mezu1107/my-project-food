@@ -10,70 +10,80 @@ import { ShoppingBag, Clock, Package, Search, ChevronRight, Loader2 } from 'luci
 import { useAuthStore } from '@/features/auth/store/authStore';
 import { useMyOrders, useTrackOrderByPhone } from '@/features/orders/hooks/useOrders';
 import { useOrderSocket } from '@/features/orders/hooks/useOrderSocket';
-import { ORDER_STATUS_LABELS, ORDER_STATUS_COLORS, type Order } from '@/types/order.types';
+import { 
+  ORDER_STATUS_LABELS, 
+  ORDER_STATUS_COLORS, 
+  type Order,
+  type OrderItem 
+} from '@/types/order.types';
 import { Skeleton } from '@/components/ui/skeleton';
 import { format } from 'date-fns';
 
-// -------------------- OrderCard --------------------
-const OrderCard = ({ order }: { order: Order }) => (
-  <Link to={`/order/${order._id}`}>
-    <Card className="hover:shadow-lg transition-all duration-200 cursor-pointer border">
-      <CardContent className="p-5">
-        {/* Header */}
-        <div className="flex justify-between items-start mb-3">
-          <div>
-            <p className="font-bold text-lg">#{order._id.slice(-6).toUpperCase()}</p>
-            <p className="text-sm text-muted-foreground">
-              {format(new Date(order.placedAt), 'dd MMM yyyy • h:mm a')}
-            </p>
+const OrderCard = ({ order }: { order: Order }) => {
+  const items = order.items || []; // default to empty array if undefined
+
+  return (
+    <Link to={`/order/${order._id}`}>
+      <Card className="hover:shadow-lg transition-all duration-200 cursor-pointer border">
+        <CardContent className="p-5">
+          {/* Header: Order ID and Status */}
+          <div className="flex justify-between items-start mb-3">
+            <div>
+              <p className="font-bold text-lg">#{order._id.slice(-6).toUpperCase()}</p>
+              <p className="text-sm text-muted-foreground">
+                {order.placedAt
+                  ? format(new Date(order.placedAt), 'dd MMM yyyy • h:mm a')
+                  : 'Date unavailable'}
+              </p>
+            </div>
+            <Badge className={ORDER_STATUS_COLORS[order.status] || 'bg-gray-300'}>
+              {ORDER_STATUS_LABELS[order.status] || 'Unknown'}
+            </Badge>
           </div>
-          <Badge className={ORDER_STATUS_COLORS[order.status]}>
-            {ORDER_STATUS_LABELS[order.status]}
-          </Badge>
-        </div>
 
-        {/* Summary */}
-        <div className="flex items-center gap-4 text-sm text-muted-foreground">
-          <span>{order.items.length} items</span>
-          <span>•</span>
-          <span className="font-semibold text-foreground">Rs. {order.finalAmount}</span>
-        </div>
-
-        {/* Item icons */}
-        <div className="mt-4 flex items-center justify-between">
-          <div className="flex -space-x-3">
-            {order.items.slice(0, 4).map((item, i) => (
-              <div
-                key={i}
-                className="w-10 h-10 rounded-full bg-primary/10 border-2 border-background flex items-center justify-center text-xs font-bold text-primary"
-                title={item.name}
-              >
-                {item.name[0]}
-              </div>
-            ))}
-            {order.items.length > 4 && (
-              <div className="w-10 h-10 rounded-full bg-muted border-2 border-background flex items-center justify-center text-xs">
-                +{order.items.length - 4}
-              </div>
-            )}
+          {/* Summary: Items count and Total */}
+          <div className="flex items-center gap-4 text-sm text-muted-foreground">
+            <span>{items.length} item{items.length !== 1 ? 's' : ''}</span>
+            <span>•</span>
+            <span className="font-semibold text-foreground">
+              Rs. {order.finalAmount ?? '0'}
+            </span>
           </div>
-          <ChevronRight className="h-6 w-6 text-muted-foreground" />
-        </div>
-      </CardContent>
-    </Card>
-  </Link>
-);
 
-// -------------------- GuestTracker --------------------
+          {/* Items Avatars */}
+          <div className="mt-4 flex items-center justify-between">
+            <div className="flex -space-x-3">
+              {items.slice(0, 4).map((item, i) => (
+                <div
+                  key={i}
+                  className="w-10 h-10 rounded-full bg-primary/10 border-2 border-background flex items-center justify-center text-xs font-bold text-primary"
+                  title={item.menuItem?.name || 'Item'}
+                >
+                  {item.menuItem?.name?.[0] || '?'}
+                </div>
+              ))}
+              {items.length > 4 && (
+                <div className="w-10 h-10 rounded-full bg-muted border-2 border-background flex items-center justify-center text-xs">
+                  +{items.length - 4}
+                </div>
+              )}
+            </div>
+            <ChevronRight className="h-6 w-6 text-muted-foreground" />
+          </div>
+        </CardContent>
+      </Card>
+    </Link>
+  );
+};
+
+
 const GuestTracker = () => {
   const [phone, setPhone] = useState('');
   const mutation = useTrackOrderByPhone();
-
   const isValidPhone = /^03\d{9}$/.test(phone);
 
   return (
     <div className="space-y-6">
-      {/* Phone Input */}
       <Card>
         <CardContent className="p-6">
           <h3 className="font-semibold mb-4">Track Order Without Login</h3>
@@ -84,19 +94,20 @@ const GuestTracker = () => {
               onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 11))}
               maxLength={11}
             />
-            <Button onClick={() => mutation.mutate(phone)} disabled={!isValidPhone || mutation.isPending}>
+            <Button 
+              onClick={() => mutation.mutate({ phone })} 
+              disabled={!isValidPhone || mutation.isPending}
+            >
               {mutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
             </Button>
           </div>
         </CardContent>
       </Card>
 
-      {/* No orders message */}
       {mutation.data?.orders?.length === 0 && (
         <p className="text-center text-muted-foreground">No orders found</p>
       )}
 
-      {/* Display orders */}
       {mutation.data?.orders?.map((order: Order) => (
         <OrderCard key={order._id} order={order} />
       ))}
@@ -104,14 +115,11 @@ const GuestTracker = () => {
   );
 };
 
-// -------------------- OrdersPage --------------------
 export default function OrdersPage() {
   const { isAuthenticated } = useAuthStore();
-  const { data: ordersData, isLoading } = useMyOrders();
-  useOrderSocket(); // Real-time updates
+  const { data: orders = [], isLoading } = useMyOrders();
+  useOrderSocket();
 
-  // Authenticated orders (Order[]), fully typed
-  const orders: Order[] = ordersData || [];
   const active = orders.filter(o => !['delivered', 'cancelled', 'rejected'].includes(o.status));
   const past = orders.filter(o => ['delivered', 'cancelled', 'rejected'].includes(o.status));
 
@@ -119,7 +127,6 @@ export default function OrdersPage() {
 
   return (
     <div className="min-h-screen bg-muted/30">
-      {/* Header */}
       <div className="bg-background border-b">
         <div className="container mx-auto px-4 py-6">
           <h1 className="text-3xl font-bold flex items-center gap-3">
@@ -129,7 +136,6 @@ export default function OrdersPage() {
         </div>
       </div>
 
-      {/* Orders List */}
       <div className="container mx-auto px-4 py-8 max-w-4xl">
         {isLoading ? (
           <div className="space-y-4">

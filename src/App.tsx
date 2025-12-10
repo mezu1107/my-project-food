@@ -4,34 +4,49 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import { HelmetProvider } from "react-helmet-async"; // Fixes Helmet error
+import { HelmetProvider } from "react-helmet-async";
+
+// Layouts
+import { PublicLayout } from "./components/PublicLayout";
+import AdminLayout from "./components/admin/AdminLayout";
+import RiderLayout from "./components/rider/RiderLayout";
 
 // Public Pages
 import Index from "./pages/Index";
 import Home from "./pages/Home";
-import MenuPage from "./features/menu/pages/MenuPage";
-import MenuAllPage from "./features/menu/pages/MenuAllPage";
-import MenuFiltersPage from "./features/menu/pages/MenuFiltersPage";
-import MenuByLocationPage from "@/features/menu/pages/MenuByLocation";
-import Checkout from "./pages/Checkout";
-import TrackOrder from "./pages/TrackOrder";
 import Login from "./pages/Login";
 import About from "./pages/About";
 import Contact from "./pages/Contact";
 import Portfolio from "./pages/Portfolio";
 import NotFound from "./pages/NotFound";
 
-// Cart
+// Menu
+import MenuPage from "./features/menu/pages/MenuPage";
+import MenuAllPage from "./features/menu/pages/MenuAllPage";
+import MenuFiltersPage from "./features/menu/pages/MenuFiltersPage";
+import MenuByLocationPage from "@/features/menu/pages/MenuByLocation";
+
+// Cart & Checkout
 import CartPage from "@/features/cart/pages/Cart";
+import CheckoutPage from "@/features/orders/pages/CheckoutPage";
+import BankTransferPage from "@/features/orders/pages/BankTransferPage";
+import CardPaymentPage from "@/features/orders/pages/CardPaymentPage";
+
+// Orders
+import OrdersPage from "@/features/orders/pages/OrdersPage";
+import OrderSuccessPage from "@/features/orders/pages/OrderSuccessPage";
+import OrderTrackingPage from "@/features/orders/pages/OrderTrackingPage"; // ← ADDED
+
+// Address
+import AddressListPage from "@/features/address/pages/AddressListPage";
 
 // Admin
-import AdminLayout from "./components/admin/AdminLayout";
+import AdminLogin from "./pages/admin/Login";
 import AdminDashboard from "./pages/admin/Dashboard";
 import AdminOrders from "./pages/admin/Orders";
 import AdminUsers from "./pages/admin/Users";
 import AdminRiders from "./pages/admin/Riders";
 import AdminDeals from "./pages/admin/Deals";
-import AdminLogin from "./pages/admin/Login";
 import AdminMenuPage from "./features/menu/pages/AdminMenuPage";
 import EditMenuItemPage from "@/features/menu/pages/EditMenuItemPage";
 import AdminAreasList from "./pages/admin/areas/AreasList";
@@ -39,16 +54,12 @@ import AdminAddArea from "./pages/admin/areas/AddArea";
 import AdminEditArea from "./pages/admin/areas/EditArea";
 
 // Rider
-import RiderLayout from "./components/rider/RiderLayout";
-import RiderDashboard from "./pages/rider/Dashboard";
 import RiderLogin from "./pages/rider/Login";
+import RiderDashboard from "./pages/rider/Dashboard";
 import RiderDeliveries from "./pages/rider/Deliveries";
 
 // Debug
 import DebugAPI from "./pages/DebugAPI";
-
-// Layout
-import { PublicLayout } from "./components/PublicLayout";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -61,10 +72,10 @@ const queryClient = new QueryClient({
 });
 
 export default function App() {
-  // This function opens the area selector again (used by Home page)
   const openAreaChecker = () => {
-    sessionStorage.removeItem("areaChecked");
-    window.location.href = "/"; // Triggers Index.tsx to show modal
+    sessionStorage.removeItem("selectedArea");
+    sessionStorage.removeItem("areaCheckedAt");
+    window.location.href = "/";
   };
 
   return (
@@ -81,24 +92,33 @@ export default function App() {
             }}
           >
             <Routes>
-              {/* PUBLIC ROUTES */}
+
+              {/* ====================== PUBLIC ROUTES ====================== */}
               <Route element={<PublicLayout />}>
                 <Route path="/" element={<Index />} />
+                <Route path="/home" element={<Home openAreaChecker={openAreaChecker} />} />
 
-                {/* Fixed: openAreaChecker is now passed */}
-                <Route
-                  path="/home"
-                  element={<Home openAreaChecker={openAreaChecker} />}
-                />
-
+                {/* Menu */}
                 <Route path="/menu" element={<MenuPage />} />
                 <Route path="/menu/all" element={<MenuAllPage />} />
                 <Route path="/menu/filters" element={<MenuFiltersPage />} />
                 <Route path="/menu/area/:areaId" element={<MenuByLocationPage />} />
 
+                {/* Cart & Checkout */}
                 <Route path="/cart" element={<CartPage />} />
-                <Route path="/checkout" element={<Checkout />} />
-                <Route path="/track-order/:orderId" element={<TrackOrder />} />
+                <Route path="/checkout" element={<CheckoutPage />} />
+                <Route path="/checkout/bank-transfer/:orderId" element={<BankTransferPage />} />
+                <Route path="/checkout/card" element={<CardPaymentPage />} />
+
+                {/* Orders */}
+                <Route path="/orders" element={<OrdersPage />} />
+                <Route path="/order/success/:orderId" element={<OrderSuccessPage />} />
+                <Route path="/order/:orderId" element={<OrderTrackingPage />} /> {/* ← ADDED */}
+
+                {/* Address */}
+                <Route path="/addresses" element={<AddressListPage />} />
+
+                {/* Static */}
                 <Route path="/login" element={<Login />} />
                 <Route path="/about" element={<About />} />
                 <Route path="/contact" element={<Contact />} />
@@ -106,7 +126,7 @@ export default function App() {
                 <Route path="/debug-api" element={<DebugAPI />} />
               </Route>
 
-              {/* ADMIN ROUTES */}
+              {/* ====================== ADMIN ROUTES ====================== */}
               <Route path="/admin/login" element={<AdminLogin />} />
               <Route path="/admin" element={<AdminLayout />}>
                 <Route index element={<AdminDashboard />} />
@@ -122,14 +142,14 @@ export default function App() {
                 <Route path="areas/edit/:areaId" element={<AdminEditArea />} />
               </Route>
 
-              {/* RIDER ROUTES */}
+              {/* ====================== RIDER ROUTES ====================== */}
               <Route path="/rider/login" element={<RiderLogin />} />
               <Route path="/rider" element={<RiderLayout />}>
                 <Route index element={<RiderDashboard />} />
                 <Route path="deliveries" element={<RiderDeliveries />} />
               </Route>
 
-              {/* 404 */}
+              {/* ====================== 404 ====================== */}
               <Route path="*" element={<NotFound />} />
             </Routes>
           </BrowserRouter>
