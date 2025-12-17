@@ -279,7 +279,7 @@ export const Home: React.FC<HomeProps> = ({ openAreaChecker }) => {
 
             <div className="text-center mt-12">
               <Button asChild size="lg">
-                <Link to="/menu">View Full Menu →</Link>
+                <Link to="/menu/all">View Full Menu →</Link>
               </Button>
             </div>
           </>

@@ -1,48 +1,51 @@
-// src/pages/Login.tsx
+// src/pages/Register.tsx
 // FINAL PRODUCTION — DECEMBER 18, 2025
 
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Mail, Lock, Eye, EyeOff } from "lucide-react";
+import { User, Phone, Mail, Lock, Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 
-import { useLogin } from "@/features/auth/hooks/useLogin";
+import { useRegister } from "@/features/auth/hooks/useRegister";
 
-export default function Login() {
-  const navigate = useNavigate();
-  const loginMutation = useLogin();
+export default function Register() {
+  const registerMutation = useRegister();
 
   const [showPassword, setShowPassword] = useState(false);
-  const [credentials, setCredentials] = useState({
-    emailOrPhone: "",
+  const [formData, setFormData] = useState({
+    name: "",
+    phone: "",
+    email: "",
     password: "",
   });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!credentials.emailOrPhone.trim()) {
-      toast.error("Please enter your email or phone");
+    if (!formData.name.trim()) {
+      toast.error("Full name is required");
       return;
     }
-    if (!credentials.password) {
-      toast.error("Password is required");
+    if (!formData.phone.trim()) {
+      toast.error("Phone number is required");
+      return;
+    }
+    if (formData.password.length < 8) {
+      toast.error("Password must be at least 8 characters");
       return;
     }
 
-    const email = credentials.emailOrPhone.includes("@")
-      ? credentials.emailOrPhone.trim().toLowerCase()
-      : undefined;
-    const phone = !credentials.emailOrPhone.includes("@")
-      ? credentials.emailOrPhone.trim()
-      : undefined;
-
-    loginMutation.mutate({ email, phone, password: credentials.password });
+    registerMutation.mutate({
+      name: formData.name.trim(),
+      phone: formData.phone.trim(),
+      email: formData.email.trim() || undefined,
+      password: formData.password,
+    });
   };
 
   return (
@@ -68,45 +71,78 @@ export default function Login() {
           </motion.div>
 
           <h1 className="text-4xl md:text-5xl font-black text-gray-900">
-            Welcome Back
+            Create Account
           </h1>
           <p className="mt-3 text-lg text-muted-foreground">
-            Login to your AM Foods account
+            Join AM Foods Pakistan today
           </p>
         </div>
 
-        {/* Login Card */}
+        {/* Register Card */}
         <Card className="shadow-2xl border-0 overflow-hidden">
           <CardHeader className="bg-gradient-to-r from-orange-500 to-amber-600 text-white py-8">
             <CardTitle className="text-3xl font-bold text-center">
-              Sign In
+              Sign Up
             </CardTitle>
           </CardHeader>
 
           <CardContent className="pt-10 pb-12 px-8 md:px-12">
             <form onSubmit={handleSubmit} className="space-y-7">
-              {/* Email/Phone Field */}
+              {/* Name Field */}
               <div className="space-y-3">
-                <Label htmlFor="emailOrPhone" className="text-base font-medium">
-                  Email or Phone Number
+                <Label htmlFor="name" className="text-base font-medium">
+                  Full Name
                 </Label>
                 <div className="relative">
-                  {credentials.emailOrPhone.includes("@") ? (
-                    <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-orange-600" />
-                  ) : (
-                    <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-orange-600" />
-                  )}
+                  <User className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-orange-600" />
                   <Input
-                    id="emailOrPhone"
+                    id="name"
                     type="text"
-                    placeholder="john@example.com or 03123456789"
+                    placeholder="Ahmed Khan"
                     className="pl-12 h-14 text-lg border-2 border-orange-200 focus:border-orange-500 transition-all"
-                    value={credentials.emailOrPhone}
-                    onChange={(e) =>
-                      setCredentials({ ...credentials, emailOrPhone: e.target.value })
-                    }
-                    disabled={loginMutation.isPending}
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    disabled={registerMutation.isPending}
                     required
+                  />
+                </div>
+              </div>
+
+              {/* Phone Field */}
+              <div className="space-y-3">
+                <Label htmlFor="phone" className="text-base font-medium">
+                  Phone Number
+                </Label>
+                <div className="relative">
+                  <Phone className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-orange-600" />
+                  <Input
+                    id="phone"
+                    type="tel"
+                    placeholder="03123456789"
+                    className="pl-12 h-14 text-lg border-2 border-orange-200 focus:border-orange-500 transition-all"
+                    value={formData.phone}
+                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                    disabled={registerMutation.isPending}
+                    required
+                  />
+                </div>
+              </div>
+
+              {/* Email Field */}
+              <div className="space-y-3">
+                <Label htmlFor="email" className="text-base font-medium">
+                  Email Address 
+                </Label>
+                <div className="relative">
+                  <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-orange-600" />
+                  <Input
+                    id="email"
+                    type="email"
+                    placeholder="ahmed@example.com"
+                    className="pl-12 h-14 text-lg border-2 border-orange-200 focus:border-orange-500 transition-all"
+                    value={formData.email}
+                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    disabled={registerMutation.isPending}
                   />
                 </div>
               </div>
@@ -123,11 +159,9 @@ export default function Login() {
                     type={showPassword ? "text" : "password"}
                     placeholder="••••••••"
                     className="pl-12 pr-14 h-14 text-lg border-2 border-orange-200 focus:border-orange-500 transition-all"
-                    value={credentials.password}
-                    onChange={(e) =>
-                      setCredentials({ ...credentials, password: e.target.value })
-                    }
-                    disabled={loginMutation.isPending}
+                    value={formData.password}
+                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                    disabled={registerMutation.isPending}
                     required
                   />
                   <button
@@ -138,15 +172,6 @@ export default function Login() {
                     {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                   </button>
                 </div>
-
-                <div className="text-right">
-                  <Link
-                    to="/forgot-password"
-                    className="text-sm font-medium text-orange-600 hover:text-orange-700 hover:underline transition-all"
-                  >
-                    Forgot password?
-                  </Link>
-                </div>
               </div>
 
               {/* Submit Button */}
@@ -154,21 +179,21 @@ export default function Login() {
                 type="submit"
                 size="lg"
                 className="w-full h-14 text-lg font-bold bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-700 hover:to-amber-700 text-white shadow-lg transform hover:scale-105 transition-all duration-200"
-                disabled={loginMutation.isPending}
+                disabled={registerMutation.isPending}
               >
-                {loginMutation.isPending ? "Logging in..." : "Login to Account"}
+                {registerMutation.isPending ? "Creating Account..." : "Create Account"}
               </Button>
             </form>
 
-            {/* Register Link */}
+            {/* Login Link */}
             <div className="mt-10 text-center">
               <p className="text-base text-muted-foreground">
-                Don't have an account?{" "}
+                Already have an account?{" "}
                 <Link
-                  to="/register"
+                  to="/login"
                   className="font-bold text-orange-600 hover:text-orange-700 hover:underline transition-all"
                 >
-                  Register here
+                  Login here
                 </Link>
               </p>
             </div>

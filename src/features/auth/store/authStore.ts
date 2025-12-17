@@ -1,8 +1,24 @@
 // src/features/auth/store/authStore.ts
+
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { User, AuthMeResponse } from '@/types/auth.types';
-import { api } from '@/lib/api';
+import { api } from '@/lib/api'; // axios instance with baseURL setup
+
+// Define User interface
+export interface User {
+  id: string;
+  name: string;
+  phone: string;
+  email?: string;
+  role: string;
+  city: string;
+  currentLocation?: [number, number];
+}
+
+// Response from /auth/me endpoint
+export interface AuthMeResponse {
+  user: User;
+}
 
 interface AuthStore {
   user: User | null;
@@ -13,7 +29,7 @@ interface AuthStore {
 
   // Actions
   setAuth: (user: User, token: string) => void;
-  setUser: (updatedUser: User) => void;
+  setUser: (user: User) => void;
   logout: () => void;
   checkAuth: () => Promise<void>;
   setLoading: (loading: boolean) => void;
@@ -25,14 +41,11 @@ export const useAuthStore = create<AuthStore>()(
       user: null,
       token: null,
       isAuthenticated: false,
-      isLoading: true,
+      isLoading: false,
       isInitialized: false,
 
-      setAuth: (user: User, token: string) => {
-        // Save token to localStorage
+      setAuth: (user, token) => {
         localStorage.setItem('authToken', token);
-
-        // Set Authorization header globally for all future requests
         api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
 
         set({
@@ -44,12 +57,11 @@ export const useAuthStore = create<AuthStore>()(
         });
       },
 
-      setUser: (updatedUser: User) => {
-        set({ user: updatedUser });
+      setUser: (user) => {
+        set({ user });
       },
 
       logout: () => {
-        // Clear token from storage and headers
         localStorage.removeItem('authToken');
         delete api.defaults.headers.common['Authorization'];
 
@@ -71,7 +83,6 @@ export const useAuthStore = create<AuthStore>()(
         }
 
         try {
-          // Set header for this request
           api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
 
           const { data }: { data: AuthMeResponse } = await api.get('/auth/me');
@@ -86,7 +97,6 @@ export const useAuthStore = create<AuthStore>()(
         } catch (error: any) {
           console.warn('Auth check failed:', error.response?.data?.message || error.message);
 
-          // Clean up invalid/expired token
           localStorage.removeItem('authToken');
           delete api.defaults.headers.common['Authorization'];
 
@@ -100,12 +110,10 @@ export const useAuthStore = create<AuthStore>()(
         }
       },
 
-      setLoading: (loading: boolean) => {
-        set({ isLoading: loading });
-      },
+      setLoading: (loading) => set({ isLoading: loading }),
     }),
     {
-      name: 'amfood-auth-storage', // Unique name for persist
+      name: 'amfood-auth-storage', // storage key
       version: 1,
       partialize: (state) => ({
         token: state.token,

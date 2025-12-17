@@ -17,8 +17,7 @@ interface RiderLocationPayload {
 export const useOrderSocket = (orderId?: string) => {
   const queryClient = useQueryClient();
   const { user, isAuthenticated, token } = useAuthStore();
-  
-  // Safely extract role and id
+
   const role = user?.role;
   const userId = user?.id;
 
@@ -84,16 +83,20 @@ export const useOrderSocket = (orderId?: string) => {
   );
 
   // === RIDER ONLINE/OFFLINE ===
-  const handleRiderStatus = useCallback((data: { riderId: string }) => {
-    if (role === 'admin' || role === 'kitchen') {
-      queryClient.invalidateQueries({ queryKey: ['active-riders'] });
-    }
-  }, [role, queryClient]);
+  const handleRiderStatus = useCallback(
+    (data: { riderId: string }) => {
+      if (role === 'admin' || role === 'kitchen') {
+        queryClient.invalidateQueries({ queryKey: ['active-riders'] });
+      }
+    },
+    [role, queryClient]
+  );
 
   useEffect(() => {
     if (!isAuthenticated || !token || !userId) return;
 
-    const socket = getSocket() || initSocket(token);
+    // IMPORTANT FIX: initSocket called WITHOUT token argument
+    const socket = getSocket() || initSocket();
 
     // Join user room
     socket.emit('join', `user:${userId}`);

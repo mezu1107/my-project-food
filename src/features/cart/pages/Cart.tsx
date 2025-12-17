@@ -210,7 +210,12 @@ export default function CartPage() {
                 <Button
                   size="lg"
                   className="w-full"
-                  onClick={() => navigate('/checkout')}
+                  onClick={() => {
+                    if (items.length > 0) {
+                      navigate('/checkout');
+                    }
+                  }}
+                  disabled={items.length === 0}
                 >
                   Proceed to Checkout
                 </Button>

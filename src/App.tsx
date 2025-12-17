@@ -19,10 +19,17 @@ import { KitchenLayout } from "./components/KitchenLayout"; // ← ADD THIS
 import Index from "./pages/Index";
 import Home from "./pages/Home";
 import Login from "./pages/Login";
+import Register from "./pages/Register";
+import ForgotPassword from "./pages/ForgotPassword";
+import VerifyOtp from "./pages/VerifyOtp";
+import ResetPassword from "./pages/ResetPassword";
 import About from "./pages/About";
 import Contact from "./pages/Contact";
 import Portfolio from "./pages/Portfolio";
 import NotFound from "./pages/NotFound";
+import Profile from "./pages/Profile";
+import UserDashboard from "./pages/UserDashboard";
+import ChangePassword from "./pages/ChangePassword";
 
 // Menu
 import MenuPage from "./features/menu/pages/MenuPage";
@@ -119,11 +126,18 @@ export default function App() {
                 <Route path="/addresses" element={<AddressListPage />} />
 
                 <Route path="/login" element={<Login />} />
-
+                <Route path="/register" element={<Register />} />
                 <Route path="/about" element={<About />} />
                 <Route path="/contact" element={<Contact />} />
                 <Route path="/portfolio" element={<Portfolio />} />
-
+                {/* ====================== AUTH ROUTES ====================== */}
+                <Route path="/forgot-password" element={<ForgotPassword />} />
+                <Route path="/verify-otp" element={<VerifyOtp />} />
+                <Route path="/reset-password" element={<ResetPassword />} />
+                {/* Inside PublicLayout or wherever you want profile */}
+                <Route path="/profile" element={<Profile />} />
+                <Route path="/dashboard" element={<UserDashboard />} />
+                <Route path="/change-password" element={<ChangePassword />} />
                 <Route path="/debug-api" element={<DebugAPI />} />
               </Route>
 
