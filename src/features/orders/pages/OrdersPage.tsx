@@ -1,6 +1,6 @@
 // src/features/orders/pages/OrdersPage.tsx
-// FINAL PRODUCTION — DECEMBER 16, 2025
-// Fully synced with backend, order.types.ts, and hooks
+// FINAL PRODUCTION — DECEMBER 21, 2025
+// Fully fixed: GuestTracker restored + review support on delivered orders
 
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -26,6 +26,7 @@ import {
   ChevronRight,
   Loader2,
   PackageOpen,
+  Star,
 } from 'lucide-react';
 
 import { useAuthStore } from '@/features/auth/store/authStore';
@@ -39,75 +40,112 @@ import {
 } from '@/types/order.types';
 
 import { format } from 'date-fns';
+import SubmitReviewModal from '@/features/reviews/components/SubmitReviewModal';
 
 const OrderCard = ({ order }: { order: Order }) => {
   const items = order.items || [];
+  const [reviewModalOpen, setReviewModalOpen] = useState(false);
+
+  const isDeliveredAndNotReviewed = order.status === 'delivered' && !order.review;
 
   return (
-    <Link to={`/track/${order._id}`} className="block">
-      <Card className="hover:shadow-lg transition-shadow duration-200 cursor-pointer border">
-        <CardContent className="p-6">
-          {/* Header: Short ID + Date + Status */}
-          <div className="flex justify-between items-start mb-4">
-            <div>
-              <p className="font-bold text-xl">#{order.shortId}</p>
-              <p className="text-sm text-muted-foreground mt-1">
-                {format(new Date(order.placedAt), 'dd MMM yyyy • h:mm a')}
-              </p>
-            </div>
-            <Badge variant="outline" className={`${ORDER_STATUS_COLORS[order.status]} text-white`}>
-              {ORDER_STATUS_LABELS[order.status]}
-            </Badge>
-          </div>
-
-          <Separator className="my-4" />
-
-          {/* Items summary */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              {/* Item avatars */}
-              <div className="flex -space-x-3">
-                {items.slice(0, 4).map((item, i) => (
-                  <div
-                    key={i}
-                    className="w-12 h-12 rounded-full bg-primary/10 border-2 border-background flex items-center justify-center text-sm font-bold text-primary"
-                    title={item.menuItem.name}
-                  >
-                    {item.menuItem.name[0].toUpperCase()}
-                  </div>
-                ))}
-                {items.length > 4 && (
-                  <div className="w-12 h-12 rounded-full bg-muted border-2 border-background flex items-center justify-center text-sm font-medium">
-                    +{items.length - 4}
-                  </div>
-                )}
-              </div>
-
-              <div className="text-sm text-muted-foreground">
-                <p>{items.length} item{items.length !== 1 ? 's' : ''}</p>
-                <p className="font-semibold text-foreground mt-1">
-                  Rs. {order.finalAmount.toLocaleString()}
+    <>
+      <Link to={`/track/${order._id}`} className="block">
+        <Card className="hover:shadow-lg transition-shadow duration-200 cursor-pointer border">
+          <CardContent className="p-6">
+            {/* Header */}
+            <div className="flex justify-between items-start mb-4">
+              <div>
+                <p className="font-bold text-xl">#{order.shortId}</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  {format(new Date(order.placedAt), 'dd MMM yyyy • h:mm a')}
                 </p>
               </div>
+              <div className="flex flex-col items-end gap-2">
+                <Badge variant="outline" className={`${ORDER_STATUS_COLORS[order.status]} text-white`}>
+                  {ORDER_STATUS_LABELS[order.status]}
+                </Badge>
+                {isDeliveredAndNotReviewed && (
+                  <Badge variant="outline" className="border-orange-600 text-orange-600">
+                    <Star className="h-4 w-4 mr-1" />
+                    Review Pending
+                  </Badge>
+                )}
+              </div>
             </div>
 
-            <ChevronRight className="h-6 w-6 text-muted-foreground" />
-          </div>
-        </CardContent>
-      </Card>
-    </Link>
+            <Separator className="my-4" />
+
+            {/* Items + Price */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="flex -space-x-3">
+                  {items.slice(0, 4).map((item, i) => (
+                    <div
+                      key={i}
+                      className="w-12 h-12 rounded-full bg-primary/10 border-2 border-background flex items-center justify-center text-sm font-bold text-primary"
+                      title={item.menuItem.name}
+                    >
+                      {item.menuItem.name[0].toUpperCase()}
+                    </div>
+                  ))}
+                  {items.length > 4 && (
+                    <div className="w-12 h-12 rounded-full bg-muted border-2 border-background flex items-center justify-center text-sm font-medium">
+                      +{items.length - 4}
+                    </div>
+                  )}
+                </div>
+
+                <div className="text-sm text-muted-foreground">
+                  <p>{items.length} item{items.length !== 1 ? 's' : ''}</p>
+                  <p className="font-semibold text-foreground mt-1">
+                    Rs. {order.finalAmount.toLocaleString()}
+                  </p>
+                </div>
+              </div>
+
+              <ChevronRight className="h-6 w-6 text-muted-foreground" />
+            </div>
+
+            {/* Review Button */}
+            {isDeliveredAndNotReviewed && (
+              <div className="mt-6">
+                <Button
+                  className="w-full"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setReviewModalOpen(true);
+                  }}
+                >
+                  <Star className="mr-2 h-5 w-5" />
+                  Rate & Review This Order
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </Link>
+
+      <SubmitReviewModal
+        orderId={order._id}
+        open={reviewModalOpen}
+        onOpenChange={setReviewModalOpen}
+      />
+    </>
   );
 };
 
+// Guest order tracking component
 const GuestTracker = () => {
   const [phone, setPhone] = useState('');
   const mutation = useTrackOrdersByPhone();
 
-  const isValidPhone = /^03\d{9}$/.test(phone);
+  const isValidPhone = /^03\d{9}$/.test(phone.replace(/\D/g, ''));
 
   const handleTrack = () => {
     if (isValidPhone) {
-      mutation.mutate({ phone });
+      mutation.mutate({ phone: phone.replace(/\D/g, '') });
     }
   };
 
@@ -160,9 +198,10 @@ const GuestTracker = () => {
         </Card>
       )}
 
-      {mutation.data?.orders.map((order: Order) => (
-        <OrderCard key={order._id} order={order} />
-      ))}
+      {mutation.isSuccess &&
+        mutation.data.orders.map((order: Order) => (
+          <OrderCard key={order._id} order={order} />
+        ))}
     </div>
   );
 };
@@ -170,11 +209,8 @@ const GuestTracker = () => {
 export default function OrdersPage() {
   const { isAuthenticated } = useAuthStore();
   const { data: orders = [], isLoading } = useMyOrders();
-
-  // Real-time updates for authenticated users
   useOrderSocket();
 
-  // Split orders
   const activeOrders = orders.filter(
     (o) => !['delivered', 'cancelled', 'rejected'].includes(o.status)
   );

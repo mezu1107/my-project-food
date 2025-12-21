@@ -22,7 +22,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Loader2, CreditCard, Lock, AlertCircle, CheckCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { useCartStore } from '@/features/cart/store/useCartStore';
+import { useCartStore } from '@/features/cart/hooks/useCartStore';
 import { api } from '@/lib/api'; // your axios instance
 import type { CreateOrderResponse } from '@/types/order.types';
 

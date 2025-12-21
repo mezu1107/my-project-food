@@ -45,40 +45,75 @@ export const useOrder = (orderId: string | undefined) => {
   });
 };
 
-// Public tracking: Track orders by phone (guest access)
+// src/features/orders/hooks/useOrders.ts (relevant sections only)
+
+/**
+ * Public: Track orders by phone number (guest access)
+ * Matches backend: POST /api/orders/track/by-phone
+ */
 export const useTrackOrdersByPhone = () => {
   return useMutation<OrdersResponse, Error, { phone: string }>({
     mutationFn: async ({ phone }) => {
-      if (!phone || phone.length < 10) throw new Error('Invalid phone number');
-      const { data } = await api.post<OrdersResponse>('/orders/track/by-phone', { phone });
+      // Basic client-side validation
+      const cleanedPhone = phone.replace(/\s/g, '');
+      if (!cleanedPhone || cleanedPhone.length < 10) {
+        throw new Error('Please enter a valid phone number');
+      }
+
+      const { data } = await api.post<OrdersResponse>('/orders/track/by-phone', {
+        phone: cleanedPhone,
+      });
+
       return data;
     },
     onSuccess: (data) => {
       if (data.orders.length === 0) {
         toast.info('No orders found for this phone number');
       } else {
-        toast.success(`${data.orders.length} order(s) found!`);
+        toast.success(`Found ${data.orders.length} order${data.orders.length > 1 ? 's' : ''}!`);
       }
     },
-    onError: (err) => {
-      toast.error(err.message || 'Failed to track orders');
+    onError: (error: any) => {
+      const message =
+        error.response?.data?.message ||
+        error.message ||
+        'Failed to search orders. Please try again.';
+      toast.error(message);
     },
   });
 };
 
-
-// Public tracking: Single order by ID (guest + authenticated)
+/**
+ * Public: Track a single order by ID (accessible to guests and logged-in users)
+ * Matches backend: GET /api/orders/track/:orderId
+ */
 export const useTrackOrder = (orderId: string | undefined) => {
-  return useQuery<Order>({
+  return useQuery<Order, Error>({
     queryKey: ['track-order', orderId],
-    queryFn: async () => {
-      if (!orderId || !/^[0-9a-fA-F]{24}$/.test(orderId)) {
-        throw new Error('Invalid order ID');
+    queryFn: async (): Promise<Order> => {
+      if (!orderId) {
+        throw new Error('Order ID is missing');
       }
+
+      // Validate MongoDB ObjectId format
+      if (!/^[0-9a-fA-F]{24}$/.test(orderId)) {
+        throw new Error('Invalid order ID format');
+      }
+
       const { data } = await api.get<OrderResponse>(`/orders/track/${orderId}`);
       return data.order;
     },
     enabled: !!orderId,
+    staleTime: 30_000, // 30 seconds – real-time updates handled via socket
+    gcTime: 5 * 60_000, // Keep in cache for 5 minutes
+    refetchOnWindowFocus: true,
+    retry: (failureCount, error: any) => {
+      // Don't retry on 404 (order not found) or 400 (invalid ID)
+      if (error.response?.status === 404 || error.response?.status === 400) {
+        return false;
+      }
+      return failureCount < 2;
+    },
   });
 };
 
@@ -152,25 +187,6 @@ export const useCancelOrder = () => {
   });
 };
 
-// Customer reject order (only pending/confirmed)
-export const useCustomerRejectOrder = () => {
-  const queryClient = useQueryClient();
-
-  return useMutation<OrderResponse, Error, { orderId: string; reason?: string; note?: string }>({
-    mutationFn: async ({ orderId, reason, note }) => {
-      const { data } = await api.patch<OrderResponse>(`/orders/${orderId}/reject`, { reason, note });
-      return data;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['my-orders'] });
-      queryClient.invalidateQueries({ queryKey: ['order'] });
-      toast.success('Order rejected');
-    },
-    onError: (error: any) => {
-      toast.error(error.response?.data?.message || 'Cannot reject order');
-    },
-  });
-};
 
 // === UTILITIES ===
 
@@ -262,5 +278,48 @@ export const useAdminOrders = (filters?: {
       return data;
     },
     staleTime: 30_000,
+  });
+};
+
+
+// === ORDER REJECTION (CUSTOMER) ===
+export const useCustomerRejectOrder = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation<OrderResponse, Error, { orderId: string; reason?: string; note?: string }>({
+    mutationFn: async ({ orderId, reason, note }) => {
+      const { data } = await api.patch<OrderResponse>(`/orders/${orderId}/reject`, { reason, note });
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['my-orders'] });
+      queryClient.invalidateQueries({ queryKey: ['order'] });
+      queryClient.invalidateQueries({ queryKey: ['track-order'] });
+      toast.success('Order rejected successfully');
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || 'Cannot reject order at this stage');
+    },
+  });
+};
+
+// === ORDER REJECTION (ADMIN) ===
+export const useAdminRejectOrder = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation<OrderResponse, Error, { orderId: string; reason?: string; note?: string }>({
+    mutationFn: async ({ orderId, reason, note }) => {
+      const { data } = await api.patch<OrderResponse>(`/orders/${orderId}/admin-reject`, { reason, note });
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-orders'] });
+      queryClient.invalidateQueries({ queryKey: ['order'] });
+      queryClient.invalidateQueries({ queryKey: ['track-order'] });
+      toast.success('Order rejected by admin');
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || 'Failed to reject order');
+    },
   });
 };

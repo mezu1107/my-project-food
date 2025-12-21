@@ -1,6 +1,13 @@
 // src/types/order.types.ts
-// FINAL PRODUCTION — DECEMBER 16, 2025
-// FULLY SYNCED WITH BACKEND (orderController.js + validation)
+// FINAL PRODUCTION — DECEMBER 21, 2025
+// FULLY SYNCED WITH BACKEND + REVIEW POPULATION SUPPORT
+
+import type { Address } from '@/features/address/types/address.types';
+import type { Review } from '@/features/reviews/types/review.types';
+
+/* =======================
+   PAYMENT & STATUS TYPES
+   ======================= */
 
 export type PaymentMethod =
   | 'cod'
@@ -8,7 +15,7 @@ export type PaymentMethod =
   | 'easypaisa'
   | 'jazzcash'
   | 'bank'
-  | 'wallet'; // wallet is used when finalAmount === 0
+  | 'wallet';
 
 export type OrderStatus =
   | 'pending'
@@ -27,6 +34,10 @@ export type PaymentStatus =
   | 'canceled'
   | 'refunded';
 
+/* =======================
+   ORDER CORE MODELS
+   ======================= */
+
 export interface OrderItem {
   menuItem: {
     _id: string;
@@ -44,6 +55,10 @@ export interface GuestInfo {
   isGuest: true;
 }
 
+/**
+ * Guest checkout address snapshot
+ * (embedded, not a saved Address document)
+ */
 export interface AddressDetails {
   fullAddress: string;
   label: string;
@@ -61,39 +76,91 @@ export interface AppliedDeal {
   appliedDiscount: number;
 }
 
+/* =======================
+   ORDER ENTITY
+   ======================= */
+
 export interface Order {
   _id: string;
-  shortId: string; // e.g., ABC123 (last 6 chars uppercase)
+  shortId: string;
+
   items: OrderItem[];
-  customer?: { _id: string; name: string; phone: string };
+
+  customer?: {
+    _id: string;
+    name: string;
+    phone: string;
+  };
+
   guestInfo?: GuestInfo;
-  addressDetails: AddressDetails;
-  area: { _id: string; name: string };
-  deliveryZone: { _id: string; deliveryFee: number; minOrderAmount: number; estimatedTime?: string };
+
+  /**
+   * ✅ Authenticated users
+   * Populated Address document
+   */
+  address?: Address;
+
+  /**
+   * ✅ Guest users
+   * Embedded address snapshot
+   */
+  addressDetails?: AddressDetails;
+
+  area: {
+    _id: string;
+    name: string;
+  };
+
+  deliveryZone: {
+    _id: string;
+    deliveryFee: number;
+    minOrderAmount: number;
+    estimatedTime?: string;
+  };
+
   totalAmount: number;
   deliveryFee: number;
   discountApplied: number;
   walletUsed: number;
   finalAmount: number;
+
   paymentMethod: PaymentMethod;
   paymentStatus: PaymentStatus;
   status: OrderStatus;
+
   bankTransferReference?: string;
-  paymentIntentId?: string; // internal, not exposed to frontend usually
+  paymentIntentId?: string;
   receiptUrl?: string;
+
   instructions?: string;
+
   placedAt: string;
   estimatedDelivery: string;
+
   appliedDeal?: AppliedDeal | null;
-  rider?: { _id: string; name: string; phone: string } | null;
-  // Timestamps (optional – may not always be populated)
+
+  rider?: {
+    _id: string;
+    name: string;
+    phone: string;
+  } | null;
+
+  /* Optional timestamps */
   confirmedAt?: string;
   preparingAt?: string;
   outForDeliveryAt?: string;
   deliveredAt?: string;
+
+  /**
+   * ✅ Populated by backend when a review exists for this order
+   * Used in customer dashboard & order history to show review status
+   */
+  review?: Review | null;
 }
 
-// === PAYLOADS FOR CREATING ORDERS ===
+/* =======================
+   CREATE ORDER PAYLOADS
+   ======================= */
 
 export interface CreateOrderPayload {
   items: { menuItem: string; quantity: number }[];
@@ -120,13 +187,15 @@ export interface CreateGuestOrderPayload {
   instructions?: string;
 }
 
-// === API RESPONSES ===
+/* =======================
+   API RESPONSES
+   ======================= */
 
 export interface CreateOrderResponse {
   success: true;
   order: Order;
   walletUsed: number;
-  clientSecret?: string; // for card payments
+  clientSecret?: string;
   bankDetails?: {
     bankName: string;
     accountTitle: string;
@@ -154,7 +223,9 @@ export interface GenericSuccessResponse {
   order?: Order;
 }
 
-// === STATUS HELPERS ===
+/* =======================
+   STATUS HELPERS
+   ======================= */
 
 export const ORDER_STATUS_LABELS = {
   pending: 'Pending',
@@ -194,7 +265,6 @@ export const PAYMENT_STATUS_COLORS = {
   refunded: 'bg-purple-500',
 } as const;
 
-// Helper to get label
 export const getOrderStatusLabel = (status: OrderStatus): string =>
   ORDER_STATUS_LABELS[status];
 

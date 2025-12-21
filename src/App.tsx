@@ -65,8 +65,13 @@ import AdminAreasList from "./pages/admin/areas/AreasList";
 import AdminAddArea from "./pages/admin/areas/AddArea";
 import AdminEditArea from "./pages/admin/areas/EditArea";
 import ContactMessagesPage from "./pages/admin/contact/ContactMessagesPage";
-
-
+import { CustomerList } from "./features/customers/admin/customers/CustomerList";
+import { StaffList } from "./components/admin/staff/StaffList";
+import { InventoryList } from "./components/admin/inventory/InventoryList";
+import AnalyticsPage from "./features/analytics/AnalyticsPage"; 
+// Reviews Pages (NEW)
+import CustomerReviewsPage from "./features/reviews/pages/CustomerReviewsPage";
+import AdminReviewsDashboard from "./features/reviews/pages/AdminReviewsDashboard";
 // Kitchen
 import KitchenDashboard from "./pages/kitchen/KitchenDashboard";
 
@@ -130,6 +135,8 @@ export default function App() {
                 <Route path="/about" element={<About />} />
                 <Route path="/contact" element={<Contact />} />
                 <Route path="/portfolio" element={<Portfolio />} />
+                {/* ====================== REVIEWS PUBLIC PAGE ====================== */}
+                <Route path="/reviews" element={<CustomerReviewsPage />} />
                 {/* ====================== AUTH ROUTES ====================== */}
                 <Route path="/forgot-password" element={<ForgotPassword />} />
                 <Route path="/verify-otp" element={<VerifyOtp />} />
@@ -157,6 +164,13 @@ export default function App() {
                 <Route path="orders" element={<AdminOrders />} />
                 <Route path="orders/:orderId" element={<AdminOrderDetails />} />
                 <Route path="contact" element={<ContactMessagesPage />} />
+                <Route path="customers" element={<CustomerList />} />
+                <Route path="staff" element={<StaffList />} />
+                <Route path="inventory" element={<InventoryList />} />
+                <Route path="analytics" element={<AnalyticsPage />} />
+                {/* ====================== ADMIN REVIEWS DASHBOARD ====================== */}
+                <Route path="reviews" element={<AdminReviewsDashboard />} />
+                
               </Route>
 
               {/* ====================== KITCHEN ROUTES ====================== */}

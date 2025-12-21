@@ -131,7 +131,7 @@ export default function AreaChecker({
       onConfirmed?.({ area, delivery });
 
       if (!disableAutoNavigate) {
-        navigate("/menu", { replace: true });
+        navigate("/menu/area/${defaultAreaId}", { replace: true });
       }
     } else {
       toast.info(data.message || "Sorry, we don't deliver to this location yet");

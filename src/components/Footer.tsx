@@ -64,7 +64,7 @@ export const Footer = () => {
               </li>
               <li>
                 <Link
-                  to="/menu"
+                  to="/menu/all"
                   className="text-sm text-muted-foreground hover:text-primary transition-colors"
                 >
                   Menu

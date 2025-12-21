@@ -1,6 +1,6 @@
 // src/pages/admin/orders/OrderDetails.tsx
-// FINAL PRODUCTION — DECEMBER 16, 2025
-// Admin detailed view of a single order
+// FINAL PRODUCTION — DECEMBER 20, 2025
+// Admin detailed view of a single order + Admin Reject functionality
 
 import { useParams, Link } from 'react-router-dom';
 import { format } from 'date-fns';
@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Loader2 } from 'lucide-react'; // Added for loading spinner
 
 import {
   ArrowLeft,
@@ -30,8 +31,52 @@ import {
   Receipt,
 } from 'lucide-react';
 
-import { useTrackOrder, downloadReceipt } from '@/features/orders/hooks/useOrders';
+import { 
+  useTrackOrder, 
+  downloadReceipt,
+  useAdminRejectOrder 
+} from '@/features/orders/hooks/useOrders';
 import { ORDER_STATUS_LABELS, ORDER_STATUS_COLORS } from '@/types/order.types';
+
+// Types
+interface AddressDetails {
+  fullAddress?: string;
+  floor?: string;
+}
+
+interface Customer {
+  name?: string;
+  phone?: string;
+}
+
+interface Rider {
+  name?: string;
+  phone?: string;
+}
+
+interface OrderItem {
+  menuItem?: { name?: string };
+  quantity?: number;
+  priceAtOrder?: number;
+}
+
+interface Order {
+  _id: string;
+  shortId?: string;
+  status: string;
+  paymentMethod?: string;
+  placedAt?: string | Date;
+  guestInfo?: { name?: string; phone?: string; isGuest?: boolean };
+  customer?: Customer;
+  addressDetails?: AddressDetails;
+  instructions?: string;
+  rider?: Rider;
+  items?: OrderItem[];
+  deliveryFee?: number;
+  discountApplied?: number;
+  walletUsed?: number;
+  finalAmount?: number;
+}
 
 const STATUS_ICONS = {
   pending: Clock,
@@ -46,10 +91,11 @@ const STATUS_ICONS = {
 
 export default function AdminOrderDetails() {
   const { orderId } = useParams<{ orderId: string }>();
-  const { data: order, isLoading } = useTrackOrder(orderId);
+  const { data: order, isLoading } = useTrackOrder(orderId) as { data?: Order; isLoading: boolean };
+  const adminRejectOrder = useAdminRejectOrder();
 
   const handleDownloadReceipt = () => {
-    if (!order) return;
+    if (!order?._id) return;
     downloadReceipt(order._id);
   };
 
@@ -84,10 +130,13 @@ export default function AdminOrderDetails() {
   const customerPhone = order.guestInfo?.phone || order.customer?.phone || 'N/A';
 
   // Compute subtotal safely
-  const subtotal = order.items.reduce(
+  const subtotal = order.items?.reduce(
     (acc, item) => acc + (item.priceAtOrder || 0) * (item.quantity || 1),
     0
-  );
+  ) || 0;
+
+  const paymentMethod = order.paymentMethod?.toUpperCase() || 'N/A';
+  const address: AddressDetails = order.addressDetails || {};
 
   return (
     <div className="container mx-auto px-4 py-12 max-w-5xl">
@@ -107,16 +156,16 @@ export default function AdminOrderDetails() {
         <div className="flex items-center justify-center gap-6">
           <Badge className={`text-lg px-6 py-2 ${ORDER_STATUS_COLORS[order.status]} text-white`}>
             <StatusIcon className="h-5 w-5 mr-2" />
-            {ORDER_STATUS_LABELS[order.status]}
+            {ORDER_STATUS_LABELS[order.status] || 'Unknown Status'}
           </Badge>
 
           <Badge variant="outline" className="text-lg px-4 py-2">
-            {order.paymentMethod.toUpperCase()}
+            {paymentMethod}
           </Badge>
         </div>
 
         <p className="text-muted-foreground mt-4">
-          Placed on {format(new Date(order.placedAt), 'dd MMM yyyy • h:mm a')}
+          Placed on {order.placedAt ? format(new Date(order.placedAt), 'dd MMM yyyy • h:mm a') : 'N/A'}
         </p>
       </div>
 
@@ -154,9 +203,9 @@ export default function AdminOrderDetails() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-lg">{order.addressDetails.fullAddress}</p>
-          {order.addressDetails.floor && (
-            <p className="text-muted-foreground mt-1">{order.addressDetails.floor}</p>
+          <p className="text-lg">{address.fullAddress || 'N/A'}</p>
+          {address.floor && (
+            <p className="text-muted-foreground mt-1">{address.floor}</p>
           )}
           {order.instructions && (
             <div className="mt-4 p-4 bg-muted rounded-lg">
@@ -182,19 +231,21 @@ export default function AdminOrderDetails() {
                 <User className="h-9 w-9 text-primary" />
               </div>
               <div>
-                <p className="text-xl font-bold">{order.rider.name}</p>
+                <p className="text-xl font-bold">{order.rider.name || 'N/A'}</p>
                 <p className="text-muted-foreground flex items-center gap-2">
                   <Phone className="h-4 w-4" />
-                  {order.rider.phone}
+                  {order.rider.phone || 'N/A'}
                 </p>
               </div>
             </div>
-            <Button asChild>
-              <a href={`tel:${order.rider.phone}`}>
-                <Phone className="h-5 w-5 mr-2" />
-                Call Rider
-              </a>
-            </Button>
+            {order.rider.phone && (
+              <Button asChild>
+                <a href={`tel:${order.rider.phone}`}>
+                  <Phone className="h-5 w-5 mr-2" />
+                  Call Rider
+                </a>
+              </Button>
+            )}
           </CardContent>
         </Card>
       )}
@@ -208,7 +259,7 @@ export default function AdminOrderDetails() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          {order.items.map((item, i) => {
+          {order.items?.map((item, i) => {
             const itemName = item.menuItem?.name || 'Deleted Item';
             const itemPrice = (item.priceAtOrder || 0) * (item.quantity || 1);
             return (
@@ -234,13 +285,13 @@ export default function AdminOrderDetails() {
               <span>Delivery Fee</span>
               <span>Rs. {(order.deliveryFee || 0).toLocaleString()}</span>
             </div>
-            {order.discountApplied > 0 && (
+            {order.discountApplied && order.discountApplied > 0 && (
               <div className="flex justify-between text-green-600 font-medium">
                 <span>Discount Applied</span>
                 <span>-Rs. {(order.discountApplied || 0).toLocaleString()}</span>
               </div>
             )}
-            {order.walletUsed > 0 && (
+            {order.walletUsed && order.walletUsed > 0 && (
               <div className="flex justify-between text-blue-600 font-medium">
                 <span>Wallet Used</span>
                 <span>-Rs. {(order.walletUsed || 0).toLocaleString()}</span>
@@ -258,7 +309,7 @@ export default function AdminOrderDetails() {
       </Card>
 
       {/* Actions */}
-      <div className="flex justify-center gap-4">
+      <div className="flex flex-col sm:flex-row justify-center gap-4">
         <Button size="lg" variant="outline" asChild>
           <Link to="/admin/orders">Back to Orders List</Link>
         </Button>
@@ -266,6 +317,29 @@ export default function AdminOrderDetails() {
           <Receipt className="h-5 w-5 mr-2" />
           Download Receipt
         </Button>
+        {!['delivered', 'cancelled', 'rejected'].includes(order.status) && (
+          <Button
+            variant="destructive"
+            size="lg"
+            onClick={() => {
+              const reason = prompt('Reason for rejection (optional):');
+              const note = prompt('Admin note (optional):');
+              adminRejectOrder.mutate({
+                orderId: order._id,
+                reason: reason || undefined,
+                note: note || undefined,
+              });
+            }}
+            disabled={adminRejectOrder.isPending}
+          >
+            {adminRejectOrder.isPending ? (
+              <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+            ) : (
+              <XCircle className="h-5 w-5 mr-2" />
+            )}
+            Admin Reject Order
+          </Button>
+        )}
       </div>
     </div>
   );

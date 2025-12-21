@@ -1,5 +1,5 @@
 // src/features/cart/components/CartDrawer.tsx
-import { useState } from 'react';
+import { useEffect, useState, useRef } from 'react'; // ← Add useRef
 import { useNavigate } from 'react-router-dom';
 import { ShoppingCart, Plus, Minus, Trash2 } from 'lucide-react';
 
@@ -9,74 +9,80 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 
 import { useAuthStore } from '@/features/auth/store/authStore';
-import { useCartStore } from '@/features/cart/store/useCartStore';
+import { useCartStore } from '@/features/cart/hooks/useCartStore';
 import {
-  useServerCart,
+  useServerCartQuery,
   useUpdateCartQuantity,
   useRemoveFromCart,
   useClearCart,
 } from '@/features/cart/hooks/useServerCart';
+import type { CartItem } from '@/types/cart.types';
 
 export const CartDrawer = () => {
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
   const { user } = useAuthStore();
 
-  // Guest cart
   const guestCart = useCartStore();
-  const guestItems = guestCart.items;
-  const guestTotal = guestCart.getTotal();
-  const guestCount = guestCart.getItemCount();
-
-  // Server cart
-  const { data: serverData, isLoading } = useServerCart();
-  const serverItems = serverData?.items ?? [];
-  const serverTotal = serverData?.total ?? 0;
-  const serverCount = serverItems.reduce((sum, i) => sum + i.quantity, 0);
+  const { data: serverData, isLoading } = useServerCartQuery();
 
   const isGuest = !user;
 
-  const items = isGuest
-    ? guestItems.map(i => ({
-        id: i._id,
-        image: i.menuItem.image,
-        name: i.menuItem.name,
-        quantity: i.quantity,
-        priceAtAdd: i.priceAtAdd,
-        menuItemId: i.menuItem._id,
-      }))
-    : serverItems.map(i => ({
-        id: i._id,
-        image: i.menuItem.image,
-        name: i.menuItem.name,
-        quantity: i.quantity,
-        priceAtAdd: i.priceAtAdd,
-        menuItemId: i.menuItem._id,
-      }));
+  // Prevent infinite loop by tracking if we've already synced
+  const hasSyncedRef = useRef(false);
 
-  const total = isGuest ? guestTotal : serverTotal;
-  const itemCount = isGuest ? guestCount : serverCount;
+  useEffect(() => {
+    if (!isGuest && serverData?.items && !hasSyncedRef.current) {
+      hasSyncedRef.current = true;
+      guestCart.syncWithServer(serverData.items);
+    }
+  }, [isGuest, serverData?.items, guestCart]);
+
+  // Reset sync flag when switching to guest
+  useEffect(() => {
+    if (isGuest) {
+      hasSyncedRef.current = false;
+    }
+  }, [isGuest]);
+
+  const items = isGuest ? guestCart.items : (serverData?.items ?? []);
+  const total = isGuest ? guestCart.getTotal() : (serverData?.total ?? 0);
+  const itemCount = items.reduce((sum, i) => sum + i.quantity, 0);
 
   const updateQty = useUpdateCartQuantity();
   const removeItem = useRemoveFromCart();
   const clearCart = useClearCart();
 
-  const handleQty = (itemId: string, newQty: number) => {
-    if (isGuest) {
-      if (newQty <= 0) guestCart.removeItem(itemId);
-      else guestCart.updateQuantity(itemId, newQty);
+  const handleQuantityChange = (itemId: string, newQty: number) => {
+    if (newQty <= 0) {
+      handleRemove(itemId);
       return;
     }
 
-    if (newQty <= 0) removeItem.mutate(itemId);
-    else updateQty.mutate({ itemId, quantity: newQty });
+    const safeQty = Math.min(newQty, 50);
+
+    if (isGuest) {
+      guestCart.updateQuantity(itemId, safeQty);
+    } else {
+      updateQty.mutate({ itemId, quantity: safeQty });
+    }
   };
 
-  const handleRemove = (itemId: string) =>
-    isGuest ? guestCart.removeItem(itemId) : removeItem.mutate(itemId);
+  const handleRemove = (itemId: string) => {
+    if (isGuest) {
+      guestCart.removeItem(itemId);
+    } else {
+      removeItem.mutate(itemId);
+    }
+  };
 
-  const handleClear = () =>
-    isGuest ? guestCart.clearCart() : clearCart.mutate();
+  const handleClear = () => {
+    if (isGuest) {
+      guestCart.clearCart();
+    } else {
+      clearCart.mutate();
+    }
+  };
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
@@ -108,15 +114,21 @@ export const CartDrawer = () => {
 
         <div className="flex-1 overflow-hidden flex flex-col">
           {isLoading && !isGuest ? (
-            <p className="text-center py-8">Loading cart...</p>
+            <p className="text-center py-8 text-muted-foreground">Loading cart...</p>
           ) : items.length === 0 ? (
             <div className="flex-1 flex flex-col items-center justify-center text-center">
               <ShoppingCart className="h-16 w-16 text-muted-foreground/30 mb-4" />
               <h3 className="text-lg font-medium">Your cart is empty</h3>
               <p className="text-sm text-muted-foreground mt-2">
-                Browse the menu to add items.
+                Browse the menu to add delicious items.
               </p>
-              <Button className="mt-6" onClick={() => { setOpen(false); navigate('/menu'); }}>
+              <Button
+                className="mt-6"
+                onClick={() => {
+                  setOpen(false);
+                  navigate('/menu/all');
+                }}
+              >
                 Browse Menu
               </Button>
             </div>
@@ -125,11 +137,11 @@ export const CartDrawer = () => {
               <ScrollArea className="flex-1 -mx-6 px-6">
                 <div className="space-y-4 py-4">
                   {items.map((item) => (
-                    <div key={item.id} className="flex gap-4">
-                      {item.image ? (
+                    <div key={item._id} className="flex gap-4">
+                      {item.menuItem.image ? (
                         <img
-                          src={item.image}
-                          alt={item.name}
+                          src={item.menuItem.image}
+                          alt={item.menuItem.name}
                           className="w-20 h-20 rounded-lg object-cover"
                         />
                       ) : (
@@ -138,29 +150,31 @@ export const CartDrawer = () => {
                         </div>
                       )}
 
-                      <div className="flex-1">
-                        <h4 className="font-medium">{item.name}</h4>
+                      <div className="flex-1 space-y-2">
+                        <h4 className="font-medium text-base">{item.menuItem.name}</h4>
                         <p className="text-sm text-muted-foreground">
-                          Rs. {item.priceAtAdd.toFixed(2)}
+                          Rs. {item.priceAtAdd.toFixed(2)} each
                         </p>
 
                         <div className="flex items-center gap-2 mt-3">
                           <Button
                             size="icon"
                             variant="outline"
-                            onClick={() => handleQty(item.id, item.quantity - 1)}
+                            onClick={() => handleQuantityChange(item._id, item.quantity - 1)}
+                            disabled={item.quantity <= 1}
                           >
                             <Minus className="h-4 w-4" />
                           </Button>
 
-                          <span className="w-12 text-center font-medium">
+                          <span className="w-12 text-center font-medium text-base">
                             {item.quantity}
                           </span>
 
                           <Button
                             size="icon"
                             variant="outline"
-                            onClick={() => handleQty(item.id, item.quantity + 1)}
+                            onClick={() => handleQuantityChange(item._id, item.quantity + 1)}
+                            disabled={item.quantity >= 50}
                           >
                             <Plus className="h-4 w-4" />
                           </Button>
@@ -169,7 +183,7 @@ export const CartDrawer = () => {
                             size="icon"
                             variant="ghost"
                             className="ml-auto text-destructive"
-                            onClick={() => handleRemove(item.id)}
+                            onClick={() => handleRemove(item._id)}
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
@@ -195,10 +209,21 @@ export const CartDrawer = () => {
                 <Separator />
 
                 <div className="grid grid-cols-2 gap-3">
-                  <Button variant="outline" onClick={() => { setOpen(false); navigate('/cart'); }}>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setOpen(false);
+                      navigate('/cart');
+                    }}
+                  >
                     View Cart
                   </Button>
-                  <Button onClick={() => { setOpen(false); navigate('/checkout'); }}>
+                  <Button
+                    onClick={() => {
+                      setOpen(false);
+                      navigate('/checkout');
+                    }}
+                  >
                     Checkout
                   </Button>
                 </div>

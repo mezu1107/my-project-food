@@ -1,9 +1,9 @@
 // src/features/orders/pages/CheckoutPage.tsx
-// FINAL PRODUCTION — DECEMBER 18, 2025
-// ALL TS ERRORS FIXED — NO EXTERNAL SHALLOW PACKAGE NEEDED
-// Optimized performance with proper selectors and memoization
+// FINAL PRODUCTION — DECEMBER 21, 2025
+// Cart clears after successful order
+// "Add New Address" button always visible for logged-in users
 
-import { useEffect, useMemo, useState, memo } from 'react'; // ← Added useState
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -24,81 +24,59 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { Separator } from '@/components/ui/separator';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Loader2, AlertCircle, MapPin, User, Phone, CreditCard, Wallet, Building2, Smartphone } from 'lucide-react';
+import { Loader2, AlertCircle, MapPin, User, CreditCard, Wallet, Building2, Smartphone, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { useAuthStore } from '@/features/auth/store/authStore';
-import { useCartStore } from '@/features/cart/store/useCartStore';
+import { useCartStore } from '@/features/cart/hooks/useCartStore';
 import { useAddresses } from '@/features/address/hooks/useAddresses';
 import { useAreas } from '@/hooks/useCheckArea';
 import { useCreateOrder, useCreateGuestOrder } from '@/features/orders/hooks/useOrders';
-import type { CreateOrderPayload, CreateGuestOrderPayload } from '@/types/order.types';
-import type { CartItem } from '@/features/cart/store/useCartStore'; // ← Import proper type
+import type { CartItem } from '@/types/cart.types';
 
-// Schema (cleaned up — no fake isAuthenticated)
+// Zod Schema
 const checkoutSchema = z.object({
-  paymentMethod: z.enum(['cod', 'card', 'easypaisa', 'jazzcash', 'bank']),
-  addressId: z.string().min(1, 'Please select an address').optional(),
-  useNewAddress: z.boolean().optional(),
+  paymentMethod: z.enum(['cod', 'card', 'easypaisa', 'jazzcash', 'bank'], {
+    required_error: 'Please select a payment method',
+  }),
+  addressId: z.string().optional(),
   guestAddress: z
     .object({
-      fullAddress: z.string().min(10, 'Enter your complete address'),
+      fullAddress: z.string().min(10, 'Address must be at least 10 characters'),
       areaId: z.string({ required_error: 'Please select a delivery area' }),
       label: z.string().optional(),
       floor: z.string().optional(),
-      instructions: z.string().max(150).optional(),
+      instructions: z.string().max(150, 'Instructions too long').optional(),
     })
     .optional(),
-  name: z.string().min(2, 'Name is required').optional(),
-  phone: z.string().regex(/^03\d{9}$/, 'Phone must be 03XXXXXXXXX format').optional(),
+  name: z.string().min(2, 'Name must be at least 2 characters').optional(),
+  phone: z.string().regex(/^03\d{9}$/, 'Invalid format. Use 03XXXXXXXXX').optional(),
   promoCode: z.string().optional(),
-  instructions: z.string().max(300).optional(),
+  instructions: z.string().max(300, 'Instructions too long').optional(),
 }).refine(
   (data) => {
-    if (data.useNewAddress) {
-      return !!data.guestAddress?.areaId && !!data.guestAddress?.fullAddress;
+    if (data.guestAddress) {
+      return !!data.guestAddress.areaId && !!data.guestAddress.fullAddress;
     }
     return !!data.addressId;
   },
   {
-    message: 'Please complete all address details',
+    message: 'Please select a saved address or complete the address form',
     path: ['guestAddress'],
   }
 );
 
 type CheckoutForm = z.infer<typeof checkoutSchema>;
 
-// Properly typed and memoized order items list
-const OrderItemsList = memo(({ items }: { items: CartItem[] }) => {
-  return (
-    <div className="space-y-3">
-      {items.map((item) => (
-        <div key={item._id} className="flex justify-between text-sm">
-          <span className="text-muted-foreground">
-            {item.quantity} × {item.menuItem.name}
-          </span>
-          <span>Rs. {(item.priceAtAdd * item.quantity).toLocaleString()}</span>
-        </div>
-      ))}
-    </div>
-  );
-});
-
-OrderItemsList.displayName = 'OrderItemsList';
-
 export default function CheckoutPage() {
   const navigate = useNavigate();
 
-  // Auth
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const { items, getTotal, clearCart } = useCartStore();
 
-  // Cart — selective + shallow comparison without external package
-  const items = useCartStore((state) => state.items);
-  const subtotal = useCartStore((state) => state.subtotal);
-  const clearCart = useCartStore((state) => state.clearCart);
+  const subtotal = getTotal();
 
-  const { data: addresses = [] } = useAddresses();
+  const { data: addresses = [], isLoading: addressesLoading } = useAddresses();
   const { data: areas = [] } = useAreas();
 
   const createOrder = useCreateOrder();
@@ -119,17 +97,22 @@ export default function CheckoutPage() {
     resolver: zodResolver(checkoutSchema),
     defaultValues: {
       paymentMethod: 'cod',
-      useNewAddress: false,
     },
   });
 
-  const selectedAddressId = watch('addressId');
-  const useNewAddress = watch('useNewAddress');
+  const addressId = watch('addressId');
   const guestAreaId = watch('guestAddress.areaId');
 
-  // Auto-select default address
+  // Redirect if cart is empty
   useEffect(() => {
-    if (isAuthenticated && addresses.length > 0 && !selectedAddressId && !useNewAddress) {
+    if (items.length === 0) {
+      navigate('/cart', { replace: true });
+    }
+  }, [items.length, navigate]);
+
+  // Auto-select default address for logged-in users
+  useEffect(() => {
+    if (isAuthenticated && addresses.length > 0 && !addressId) {
       const defaultAddr = addresses.find((a) => a.isDefault) || addresses[0];
       if (defaultAddr) {
         setValue('addressId', defaultAddr._id);
@@ -142,9 +125,9 @@ export default function CheckoutPage() {
         }
       }
     }
-  }, [addresses, areas, isAuthenticated, selectedAddressId, useNewAddress, setValue]);
+  }, [addresses, areas, isAuthenticated, addressId, setValue]);
 
-  // Update delivery fee on area selection
+  // Update delivery info when guest selects area
   useEffect(() => {
     if (guestAreaId) {
       const area = areas.find((a) => a._id === guestAreaId);
@@ -156,16 +139,8 @@ export default function CheckoutPage() {
     }
   }, [guestAreaId, areas]);
 
-  // Clear saved address when using new one
-  useEffect(() => {
-    if (useNewAddress) {
-      setValue('addressId', undefined);
-    }
-  }, [useNewAddress, setValue]);
-
   const total = useMemo(() => subtotal + deliveryFee, [subtotal, deliveryFee]);
   const isMinOrderMet = subtotal >= minOrderAmount;
-  const showGuestAddressFields = !isAuthenticated || useNewAddress;
 
   const onSubmit = async (data: CheckoutForm) => {
     if (!isMinOrderMet) {
@@ -181,7 +156,7 @@ export default function CheckoutPage() {
     try {
       let response;
 
-      if (useNewAddress || !isAuthenticated) {
+      if (!isAuthenticated || !data.addressId) {
         response = await createGuestOrder.mutateAsync({
           items: itemsPayload,
           guestAddress: {
@@ -191,10 +166,10 @@ export default function CheckoutPage() {
             floor: data.guestAddress!.floor,
             instructions: data.guestAddress!.instructions,
           },
-          name: !isAuthenticated ? data.name!.trim() : undefined,
+          name: !isAuthenticated ? data.name?.trim() : undefined,
           phone: !isAuthenticated ? data.phone : undefined,
           paymentMethod: data.paymentMethod,
-          promoCode: data.promoCode?.trim().toUpperCase(),
+          promoCode: data.promoCode?.trim().toUpperCase() || undefined,
           instructions: data.instructions?.trim(),
         });
       } else {
@@ -202,12 +177,19 @@ export default function CheckoutPage() {
           items: itemsPayload,
           addressId: data.addressId!,
           paymentMethod: data.paymentMethod,
-          promoCode: data.promoCode?.trim().toUpperCase(),
+          promoCode: data.promoCode?.trim().toUpperCase() || undefined,
           instructions: data.instructions?.trim(),
         });
       }
 
+      // Clear cart from local Zustand store
       clearCart();
+
+      // Also clear server cart if logged in
+      if (isAuthenticated) {
+        // Trigger server cart clear via API
+        await fetch('/api/cart/clear', { method: 'DELETE' });
+      }
 
       if (response.clientSecret) {
         navigate('/checkout/card', {
@@ -237,18 +219,13 @@ export default function CheckoutPage() {
     }
   };
 
-  if (items.length === 0) {
-    navigate('/cart', { replace: true });
-    return null;
-  }
-
   return (
     <div className="min-h-screen bg-gradient-to-b from-muted/20 to-background py-8">
       <div className="container mx-auto max-w-6xl px-4">
         <h1 className="text-4xl font-bold text-center mb-10">Checkout</h1>
 
         <form onSubmit={handleSubmit(onSubmit)} className="grid lg:grid-cols-3 gap-8">
-          {/* Left: Form Fields */}
+          {/* Left Column */}
           <div className="lg:col-span-2 space-y-6">
             {/* Guest Contact Info */}
             {!isAuthenticated && (
@@ -276,64 +253,76 @@ export default function CheckoutPage() {
 
             {/* Delivery Address */}
             <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
+              <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div className="flex items-center gap-2">
                   <MapPin className="h-5 w-5" />
-                  Delivery Address
-                </CardTitle>
+                  <CardTitle>Delivery Address</CardTitle>
+                </div>
+
+                {/* Always show "Add New Address" button for logged-in users */}
+                {isAuthenticated && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => navigate('/addresses')}
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add New Address
+                  </Button>
+                )}
+              </CardHeader>
+
+              <CardContent className="space-y-5">
                 {estimatedTime && (
                   <CardDescription>Estimated delivery: {estimatedTime}</CardDescription>
                 )}
-              </CardHeader>
-              <CardContent className="space-y-5">
-                {isAuthenticated && !showGuestAddressFields && (
+
+                {isAuthenticated && (
                   <>
-                    <Controller
-                      control={control}
-                      name="addressId"
-                      render={({ field }) => (
-                        <Select onValueChange={field.onChange} value={field.value}>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select a saved address" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {addresses.map((addr) => (
-                              <SelectItem key={addr._id} value={addr._id}>
-                                <div className="space-y-1">
-                                  <p className="font-medium">{addr.label}</p>
-                                  <p className="text-sm text-muted-foreground">{addr.fullAddress}</p>
-                                </div>
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      )}
-                    />
-                    {errors.addressId && (
-                      <p className="text-sm text-destructive mt-1">{errors.addressId.message}</p>
+                    {addressesLoading ? (
+                      <div className="text-center py-8">
+                        <Loader2 className="h-8 w-8 animate-spin mx-auto" />
+                        <p className="text-sm text-muted-foreground mt-2">Loading addresses...</p>
+                      </div>
+                    ) : addresses.length > 0 ? (
+                      <>
+                        <Controller
+                          control={control}
+                          name="addressId"
+                          render={({ field }) => (
+                            <Select onValueChange={field.onChange} value={field.value}>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select a saved address" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {addresses.map((addr) => (
+                                  <SelectItem key={addr._id} value={addr._id}>
+                                    <div className="space-y-1">
+                                      <p className="font-medium">{addr.label}</p>
+                                      <p className="text-sm text-muted-foreground">{addr.fullAddress}</p>
+                                    </div>
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          )}
+                        />
+                        {errors.addressId && (
+                          <p className="text-sm text-destructive mt-1">{errors.addressId.message}</p>
+                        )}
+                      </>
+                    ) : (
+                      <div className="text-center py-8">
+                        <p className="text-muted-foreground mb-4">
+                          No saved addresses found.
+                        </p>
+                      </div>
                     )}
                   </>
                 )}
 
-                {isAuthenticated && (
-                  <div className="flex items-center space-x-2 pt-2">
-                    <Controller
-                      control={control}
-                      name="useNewAddress"
-                      render={({ field }) => (
-                        <Checkbox
-                          checked={field.value}
-                          onCheckedChange={field.onChange}
-                        />
-                      )}
-                    />
-                    <Label className="text-sm font-normal cursor-pointer">
-                      Use a different delivery address
-                    </Label>
-                  </div>
-                )}
-
-                {showGuestAddressFields && (
+                {/* Guest or logged-in with no addresses → show manual entry */}
+                {(!isAuthenticated || addresses.length === 0) && (
                   <>
                     <div>
                       <Label>Delivery Area</Label>
@@ -407,7 +396,6 @@ export default function CheckoutPage() {
                           <p className="text-sm text-muted-foreground">Pay when you receive</p>
                         </div>
                       </Label>
-
                       <Label className="flex items-center gap-4 p-4 border rounded-lg cursor-pointer hover:bg-muted/50 transition">
                         <RadioGroupItem value="card" />
                         <CreditCard className="h-6 w-6 text-blue-600" />
@@ -416,7 +404,6 @@ export default function CheckoutPage() {
                           <p className="text-sm text-muted-foreground">Secure online payment</p>
                         </div>
                       </Label>
-
                       <Label className="flex items-center gap-4 p-4 border rounded-lg cursor-pointer hover:bg-muted/50 transition">
                         <RadioGroupItem value="easypaisa" />
                         <Smartphone className="h-6 w-6 text-green-600" />
@@ -425,7 +412,6 @@ export default function CheckoutPage() {
                           <p className="text-sm text-muted-foreground">Pay via mobile wallet</p>
                         </div>
                       </Label>
-
                       <Label className="flex items-center gap-4 p-4 border rounded-lg cursor-pointer hover:bg-muted/50 transition">
                         <RadioGroupItem value="jazzcash" />
                         <Smartphone className="h-6 w-6 text-red-600" />
@@ -434,7 +420,6 @@ export default function CheckoutPage() {
                           <p className="text-sm text-muted-foreground">Pay via mobile wallet</p>
                         </div>
                       </Label>
-
                       <Label className="flex items-center gap-4 p-4 border rounded-lg cursor-pointer hover:bg-muted/50 transition">
                         <RadioGroupItem value="bank" />
                         <Building2 className="h-6 w-6 text-orange-600" />
@@ -450,14 +435,23 @@ export default function CheckoutPage() {
             </Card>
           </div>
 
-          {/* Right: Order Summary */}
+          {/* Right Column: Order Summary */}
           <div className="lg:col-span-1">
             <Card className="sticky top-6 shadow-xl">
               <CardHeader>
                 <CardTitle>Order Summary</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <OrderItemsList items={items} />
+                <div className="space-y-3">
+                  {items.map((item) => (
+                    <div key={item._id} className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">
+                        {item.quantity} × {item.menuItem.name}
+                      </span>
+                      <span>Rs. {(item.priceAtAdd * item.quantity).toLocaleString()}</span>
+                    </div>
+                  ))}
+                </div>
 
                 <Separator />
 
@@ -483,8 +477,7 @@ export default function CheckoutPage() {
                   <Alert variant="destructive">
                     <AlertCircle className="h-4 w-4" />
                     <AlertDescription>
-                      Minimum order: Rs. {minOrderAmount.toLocaleString()} 
-                      (add Rs. {(minOrderAmount - subtotal).toLocaleString()} more)
+                      Minimum order: Rs. {minOrderAmount.toLocaleString()} (add Rs. {(minOrderAmount - subtotal).toLocaleString()} more)
                     </AlertDescription>
                   </Alert>
                 )}

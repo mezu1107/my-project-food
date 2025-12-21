@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 
 import { useMenuFilters } from "@/features/menu/hooks/useMenuApi";
-import { useCartStore } from "@/features/cart/store/useCartStore";
+import { useCartStore } from "@/features/cart/hooks/useCartStore";
 import { MenuItemCard } from "../components/MenuItemCard";
 import { MenuGridSkeleton } from "../components/MenuSkeleton";
 
@@ -29,8 +29,11 @@ type SortOption =
 
 export default function MenuFiltersPage() {
   const navigate = useNavigate();
-  const { getItemCount, subtotal } = useCartStore();
-  const itemCount = getItemCount();
+const { getItemCount, getTotal } = useCartStore();
+
+const itemCount = getItemCount();
+const subtotal = getTotal();
+
 
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState<MenuCategory | "">("");

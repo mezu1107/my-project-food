@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 
 import { useAddToCart } from '@/features/cart/hooks/useServerCart';
-import { useCartStore } from '@/features/cart/store/useCartStore';
+import { useCartStore } from '@/features/cart/hooks/useCartStore';
 import { useAuthStore } from '@/features/auth/store/authStore';
 
 import type { MenuItem } from '@/features/menu/types/menu.types';

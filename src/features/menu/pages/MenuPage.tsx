@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 
 import { useAreaStore } from '@/lib/areaStore';
-import { useCartStore } from '@/features/cart/store/useCartStore';
+import { useCartStore } from '@/features/cart/hooks/useCartStore';
 import { useMenuByLocation } from '@/features/menu/hooks/useMenuApi';
 
 import { MenuHeader } from '@/features/menu/components/MenuHeader';
@@ -26,8 +26,11 @@ import {
 export default function MenuPage() {
   const navigate = useNavigate();
   const { userLocation } = useAreaStore();
-  const { getItemCount, subtotal } = useCartStore();
-  const itemCount = getItemCount();
+const { getItemCount, getTotal } = useCartStore();
+
+const itemCount = getItemCount();
+const subtotal = getTotal();
+
 
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<MenuCategory | null>(null);

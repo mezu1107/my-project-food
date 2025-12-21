@@ -1,5 +1,6 @@
 // src/components/admin/AdminLayout.tsx
-// FINAL PRODUCTION — DECEMBER 18, 2025
+// FINAL PRODUCTION — DECEMBER 21, 2025
+// Updated with Reviews & Analytics navigation
 
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
@@ -10,11 +11,15 @@ import {
   Tag,
   MapPin,
   UtensilsCrossed,
-  Monitor, // ← NEW: Icon for Kitchen Display
-  MessageSquare, // ← NEW: Icon for Contact Messages
+  Monitor,
+  MessageSquare,
   LogOut,
   Menu,
   X,
+  UserPlus,
+  Package,
+  Star,           // ← NEW: Icon for Reviews
+  BarChart3       // ← NEW: Icon for Analytics
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -36,13 +41,20 @@ const AdminLayout = () => {
   const navItems = [
     { icon: LayoutDashboard, label: "Dashboard", path: "/admin" },
     { icon: ShoppingBag, label: "Orders", path: "/admin/orders" },
-    { icon: Users, label: "Customers", path: "/admin/users" },
+    { icon: Users, label: "Customers", path: "/admin/customers" }, // Fixed: was /admin/Customers (case-sensitive)
     { icon: Bike, label: "Riders", path: "/admin/riders" },
     { icon: Tag, label: "Deals & Offers", path: "/admin/deals" },
     { icon: MapPin, label: "Delivery Areas", path: "/admin/areas" },
     { icon: UtensilsCrossed, label: "Menu Items", path: "/admin/menu" },
+    
+    // NEW: Reviews & Analytics Section
+    { icon: Star, label: "Reviews", path: "/admin/reviews" },
+    { icon: BarChart3, label: "Analytics", path: "/admin/analytics" },
+
     { icon: MessageSquare, label: "Contact Messages", path: "/admin/contact" },
-    { icon: Monitor, label: "Kitchen Display", path: "/kitchen" }, // ← NEW: Direct link
+    { icon: UserPlus, label: "Staff Promote", path: "/admin/staff" },
+    { icon: Package, label: "Inventory Management", path: "/admin/inventory" },
+    { icon: Monitor, label: "Kitchen Display", path: "/kitchen" },
   ];
 
   const currentPageTitle =

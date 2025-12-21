@@ -27,8 +27,13 @@ export const useOrderSocket = (orderId?: string) => {
       const shortId = updatedOrder.shortId;
 
       queryClient.setQueryData(['order', updatedOrder._id], { success: true, order: updatedOrder });
-      queryClient.setQueryData(['track-order', updatedOrder._id], { success: true, order: updatedOrder });
-      queryClient.invalidateQueries({ queryKey: ['my-orders'] });
+      queryClient.setQueryData(['track-order', updatedOrder._id], (old: any) => {
+        if (!old) return { success: true, order: updatedOrder };
+        return {
+          success: true,
+          order: { ...old.order, ...updatedOrder },
+        };
+      }); queryClient.invalidateQueries({ queryKey: ['my-orders'] });
 
       switch (updatedOrder.status) {
         case 'confirmed':

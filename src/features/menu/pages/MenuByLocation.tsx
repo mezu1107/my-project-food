@@ -15,7 +15,7 @@ import { MenuHeader } from "../components/MenuHeader";
 import { MenuFilters } from "../components/MenuFilters";
 import { MenuItemCard } from "../components/MenuItemCard";
 import { MenuPageSkeleton } from "../components/MenuSkeleton";
-import { useCartStore } from "@/features/cart/store/useCartStore";
+import { useCartStore } from "@/features/cart/hooks/useCartStore";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -38,8 +38,11 @@ export default function MenuByLocationPage() {
   const areaId = urlAreaId || storedAreaId;
 
   const { data, isLoading, error } = useMenuByArea(areaId || undefined);
-  const { getItemCount, subtotal } = useCartStore();
-  const itemCount = getItemCount();
+const { getItemCount, getTotal } = useCartStore();
+
+const itemCount = getItemCount();
+const subtotal = getTotal();
+;
 
   const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] =
