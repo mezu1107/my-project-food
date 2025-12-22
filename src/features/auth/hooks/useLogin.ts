@@ -35,13 +35,18 @@ export const useLogin = () => {
       return await apiClient.post<LoginResponse>("/auth/login", credentials);
     },
     onSuccess: (response) => {
-      const data = response;
-      setAuth(data.user, data.token);
-      localStorage.setItem("token", data.token);
+      const { token, user } = response; 
+
+      // Use the correct key: "authToken"
+      localStorage.setItem("authToken", token);
+
+      // Update Zustand store
+      setAuth(user, token);
+
       toast.success("Welcome back!");
 
       // Redirect based on role
-      switch (data.user.role) {
+      switch (user.role) {
         case "admin":
         case "kitchen":
         case "support":
@@ -55,7 +60,9 @@ export const useLogin = () => {
       }
     },
     onError: (error: any) => {
-      toast.error(error?.response?.data?.message || error?.message || "Login failed");
+      toast.error(
+        error?.response?.data?.message || error?.message || "Login failed"
+      );
     },
   });
 };

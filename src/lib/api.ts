@@ -1,6 +1,7 @@
+// src/lib/api.ts
+
 import axios from "axios";
 
-// Define type-safe config type
 type AxiosRequestConfig = Parameters<typeof axios.request>[0];
 
 const api = axios.create({
@@ -11,9 +12,9 @@ const api = axios.create({
 // TEMP DEV TOKEN – only for local dev
 const DEV_TOKEN = import.meta.env.VITE_DEV_TOKEN || null;
 
-// Interceptor to attach token from localStorage or DEV_TOKEN
+// FIXED: Use "authToken" consistently (matches authStore and login hooks)
 api.interceptors.request.use((config: AxiosRequestConfig) => {
-  const token = localStorage.getItem("token") || DEV_TOKEN;
+  const token = localStorage.getItem("authToken") || DEV_TOKEN;
   if (token) {
     if (!config.headers) config.headers = {};
     config.headers.Authorization = `Bearer ${token}`;

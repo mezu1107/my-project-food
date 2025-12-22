@@ -1,9 +1,10 @@
 // src/features/auth/hooks/useRegister.ts
-// FINAL PRODUCTION — DECEMBER 18, 2025
+// FINAL PRODUCTION — DECEMBER 22, 2025
+// FIXED: Consistent token storage key ("authToken")
 
 import { useMutation } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api";
-import { useAuthStore } from "../store/authStore"; // ← Correct path
+import { useAuthStore } from "../store/authStore";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 
@@ -31,23 +32,34 @@ interface RegisterResponse {
 }
 
 export const useRegister = () => {
-  const { setAuth } = useAuthStore();
+  const setAuth = useAuthStore((state) => state.setAuth);
   const navigate = useNavigate();
 
   return useMutation<RegisterResponse, Error, RegisterData>({
     mutationFn: async (data: RegisterData) => {
-      // Explicitly type the response
       return await apiClient.post<RegisterResponse>("/auth/register", data);
     },
     onSuccess: (response) => {
-      // Now TypeScript knows response has .user and .token
-      setAuth(response.user, response.token);
-      localStorage.setItem("token", response.token);
-      toast.success(response.message || "Account created successfully!");
+      // Axios wraps the actual response body in .data
+      const { token, user, message } = response;
+
+      // Store token using the consistent key "authToken"
+      localStorage.setItem("authToken", token);
+
+      // Update Zustand store
+      setAuth(user, token);
+
+      toast.success(message || "Account created successfully!");
+
+      // Redirect to home (or dashboard if preferred)
       navigate("/home");
     },
     onError: (error: any) => {
-      toast.error(error?.message || "Registration failed. Please try again.");
+      const errorMessage =
+        error?.response?.data?.message ||
+        error?.message ||
+        "Registration failed. Please try again.";
+      toast.error(errorMessage);
     },
   });
 };
