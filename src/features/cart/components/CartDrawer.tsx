@@ -1,5 +1,5 @@
 // src/features/cart/components/CartDrawer.tsx
-import { useEffect, useState, useRef } from 'react'; // ← Add useRef
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ShoppingCart, Plus, Minus, Trash2 } from 'lucide-react';
 
@@ -7,12 +7,13 @@ import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
+import { Badge } from '@/components/ui/badge';
 
 import { useAuthStore } from '@/features/auth/store/authStore';
 import { useCartStore } from '@/features/cart/hooks/useCartStore';
 import {
   useServerCartQuery,
-  useUpdateCartQuantity,
+  useUpdateCartItem,
   useRemoveFromCart,
   useClearCart,
 } from '@/features/cart/hooks/useServerCart';
@@ -24,32 +25,32 @@ export const CartDrawer = () => {
   const { user } = useAuthStore();
 
   const guestCart = useCartStore();
-  const { data: serverData, isLoading } = useServerCartQuery();
+  const { data: cartData, isLoading } = useServerCartQuery(); // ← transformed data
 
   const isGuest = !user;
-
-  // Prevent infinite loop by tracking if we've already synced
   const hasSyncedRef = useRef(false);
 
+  // Sync logged-in cart to local store once
   useEffect(() => {
-    if (!isGuest && serverData?.items && !hasSyncedRef.current) {
+    if (!isGuest && cartData && cartData.items.length > 0 && !hasSyncedRef.current) {
       hasSyncedRef.current = true;
-      guestCart.syncWithServer(serverData.items);
+      guestCart.syncWithServer({
+        items: cartData.items,
+        orderNote: cartData.orderNote,
+      });
     }
-  }, [isGuest, serverData?.items, guestCart]);
+  }, [isGuest, cartData, guestCart]);
 
-  // Reset sync flag when switching to guest
   useEffect(() => {
-    if (isGuest) {
-      hasSyncedRef.current = false;
-    }
+    if (isGuest) hasSyncedRef.current = false;
   }, [isGuest]);
 
-  const items = isGuest ? guestCart.items : (serverData?.items ?? []);
-  const total = isGuest ? guestCart.getTotal() : (serverData?.total ?? 0);
-  const itemCount = items.reduce((sum, i) => sum + i.quantity, 0);
+  const items: CartItem[] = isGuest ? guestCart.items : (cartData?.items ?? []);
+  const total = isGuest ? guestCart.getTotal() : (cartData?.total ?? 0);
+  const orderNote = isGuest ? guestCart.orderNote : (cartData?.orderNote ?? '');
+  const itemCount = items.reduce((sum, item) => sum + item.quantity, 0);
 
-  const updateQty = useUpdateCartQuantity();
+  const updateItemMutation = useUpdateCartItem();
   const removeItem = useRemoveFromCart();
   const clearCart = useClearCart();
 
@@ -62,9 +63,9 @@ export const CartDrawer = () => {
     const safeQty = Math.min(newQty, 50);
 
     if (isGuest) {
-      guestCart.updateQuantity(itemId, safeQty);
+      guestCart.updateItem(itemId, { quantity: safeQty });
     } else {
-      updateQty.mutate({ itemId, quantity: safeQty });
+      updateItemMutation.mutate({ itemId, updates: { quantity: safeQty } });
     }
   };
 
@@ -90,40 +91,39 @@ export const CartDrawer = () => {
         <Button variant="ghost" size="icon" className="relative">
           <ShoppingCart className="h-5 w-5" />
           {itemCount > 0 && (
-            <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
+            <Badge className="absolute -top-2 -right-2 h-6 w-6 rounded-full p-0 flex items-center justify-center text-xs font-bold">
               {itemCount}
-            </span>
+            </Badge>
           )}
         </Button>
       </SheetTrigger>
 
-      <SheetContent className="flex flex-col w-full sm:max-w-md">
+      <SheetContent className="flex flex-col w-full sm:max-w-lg">
         <SheetHeader>
           <SheetTitle className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <ShoppingCart className="h-6 w-6" />
-              Your Cart
+              Your Cart ({itemCount})
             </div>
             {itemCount > 0 && (
               <Button variant="ghost" size="sm" onClick={handleClear}>
-                Clear
+                Clear all
               </Button>
             )}
           </SheetTitle>
         </SheetHeader>
 
-        <div className="flex-1 overflow-hidden flex flex-col">
+        <Separator className="my-4" />
+
+        <div className="flex-1 flex flex-col">
           {isLoading && !isGuest ? (
             <p className="text-center py-8 text-muted-foreground">Loading cart...</p>
           ) : items.length === 0 ? (
-            <div className="flex-1 flex flex-col items-center justify-center text-center">
-              <ShoppingCart className="h-16 w-16 text-muted-foreground/30 mb-4" />
-              <h3 className="text-lg font-medium">Your cart is empty</h3>
-              <p className="text-sm text-muted-foreground mt-2">
-                Browse the menu to add delicious items.
-              </p>
+            <div className="flex-1 flex flex-col items-center justify-center text-center gap-4">
+              <ShoppingCart className="h-20 w-20 text-muted-foreground/30" />
+              <h3 className="text-xl font-semibold">Your cart is empty</h3>
+              <p className="text-muted-foreground">Add items from the menu to get started!</p>
               <Button
-                className="mt-6"
                 onClick={() => {
                   setOpen(false);
                   navigate('/menu/all');
@@ -134,29 +134,39 @@ export const CartDrawer = () => {
             </div>
           ) : (
             <>
-              <ScrollArea className="flex-1 -mx-6 px-6">
-                <div className="space-y-4 py-4">
+              <ScrollArea className="flex-1 pr-4">
+                <div className="space-y-6 pb-6">
                   {items.map((item) => (
                     <div key={item._id} className="flex gap-4">
                       {item.menuItem.image ? (
                         <img
                           src={item.menuItem.image}
                           alt={item.menuItem.name}
-                          className="w-20 h-20 rounded-lg object-cover"
+                          className="w-24 h-24 rounded-xl object-cover"
                         />
                       ) : (
-                        <div className="w-20 h-20 bg-muted rounded-lg flex items-center justify-center">
-                          <ShoppingCart className="h-8 w-8 text-muted-foreground/40" />
+                        <div className="w-24 h-24 bg-muted rounded-xl flex items-center justify-center">
+                          <ShoppingCart className="h-10 w-10 text-muted-foreground/40" />
                         </div>
                       )}
 
                       <div className="flex-1 space-y-2">
-                        <h4 className="font-medium text-base">{item.menuItem.name}</h4>
+                        <h4 className="font-semibold text-lg">{item.menuItem.name}</h4>
+
+                        {(item.sides?.length || item.drinks?.length || item.addOns?.length || item.specialInstructions) && (
+                          <div className="text-sm text-muted-foreground space-y-1">
+                            {item.sides?.length > 0 && <p>• Sides: {item.sides.join(', ')}</p>}
+                            {item.drinks?.length > 0 && <p>• Drinks: {item.drinks.join(', ')}</p>}
+                            {item.addOns?.length > 0 && <p>• Add-ons: {item.addOns.join(', ')}</p>}
+                            {item.specialInstructions && <p>• Note: {item.specialInstructions}</p>}
+                          </div>
+                        )}
+
                         <p className="text-sm text-muted-foreground">
-                          Rs. {item.priceAtAdd.toFixed(2)} each
+                          Rs. {item.priceAtAdd.toFixed(2)} × {item.quantity}
                         </p>
 
-                        <div className="flex items-center gap-2 mt-3">
+                        <div className="flex items-center gap-3">
                           <Button
                             size="icon"
                             variant="outline"
@@ -166,9 +176,7 @@ export const CartDrawer = () => {
                             <Minus className="h-4 w-4" />
                           </Button>
 
-                          <span className="w-12 text-center font-medium text-base">
-                            {item.quantity}
-                          </span>
+                          <span className="font-bold text-lg w-10 text-center">{item.quantity}</span>
 
                           <Button
                             size="icon"
@@ -191,7 +199,7 @@ export const CartDrawer = () => {
                       </div>
 
                       <div className="text-right">
-                        <p className="font-semibold">
+                        <p className="font-bold text-lg">
                           Rs. {(item.priceAtAdd * item.quantity).toFixed(2)}
                         </p>
                       </div>
@@ -200,32 +208,41 @@ export const CartDrawer = () => {
                 </div>
               </ScrollArea>
 
-              <div className="border-t pt-6 space-y-4">
-                <div className="flex justify-between text-lg font-semibold">
-                  <span>Total</span>
-                  <span>Rs. {total.toFixed(2)}</span>
-                </div>
+              <div className="border-t pt-6 space-y-6">
+                {orderNote && (
+                  <div className="bg-muted/50 rounded-lg p-3 text-sm">
+                    <p className="font-medium">Order Note:</p>
+                    <p className="text-muted-foreground">{orderNote}</p>
+                  </div>
+                )}
 
-                <Separator />
+                <div className="space-y-3">
+                  <div className="flex justify-between text-xl font-bold">
+                    <span>Total</span>
+                    <span>Rs. {total.toFixed(2)}</span>
+                  </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      setOpen(false);
-                      navigate('/cart');
-                    }}
-                  >
-                    View Cart
-                  </Button>
-                  <Button
-                    onClick={() => {
-                      setOpen(false);
-                      navigate('/checkout');
-                    }}
-                  >
-                    Checkout
-                  </Button>
+                  <div className="grid grid-cols-2 gap-3">
+                    <Button
+                      variant="outline"
+                      size="lg"
+                      onClick={() => {
+                        setOpen(false);
+                        navigate('/cart');
+                      }}
+                    >
+                      View Full Cart
+                    </Button>
+                    <Button
+                      size="lg"
+                      onClick={() => {
+                        setOpen(false);
+                        navigate('/checkout');
+                      }}
+                    >
+                      Checkout
+                    </Button>
+                  </div>
                 </div>
               </div>
             </>

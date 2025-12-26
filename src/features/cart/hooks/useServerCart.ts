@@ -1,46 +1,68 @@
 // src/features/cart/hooks/useServerCart.ts
+import { useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import apiClient from '@/lib/api';
-import {
-  AnyCartResponse,
-  ServerCartItem,
-  GuestCartItem,
-} from '@/types/cart.types';
+import { CartResponse, CartItem } from '@/types/cart.types';
+import { useCartStore } from './useCartStore';
 
-const CART_QUERY_KEY = ['cart'];
+const CART_QUERY_KEY = ['cart'] as const;
 
 export const useServerCartQuery = () => {
-  return useQuery({
+  const { syncWithServer } = useCartStore();
+  const queryClient = useQueryClient();
+
+  const query = useQuery({
     queryKey: CART_QUERY_KEY,
-    queryFn: async (): Promise<AnyCartResponse> => {
-      return await apiClient.get<AnyCartResponse>('/cart'); // ← returns res.data
+    queryFn: async (): Promise<CartResponse> => {
+      // apiClient.get already returns res.data
+      return await apiClient.get<CartResponse>('/cart');
     },
-    select: (data) => ({
-      items: (data.cart?.items ?? []) as (ServerCartItem | GuestCartItem)[],
-      total: data.cart?.total ?? 0,
-      isGuest: data.isGuest ?? true,
-      message: data.message,
-      success: data.success,
-    }),
     staleTime: 30_000,
-    retry: 1,
+    retry: 2,
+    refetchOnWindowFocus: false, // optional: avoid refetch on tab switch
   });
+
+  const { data, isSuccess } = query;
+
+  // Sync server cart → local Zustand store when data is successfully loaded
+  useEffect(() => {
+    if (isSuccess && data?.success && data.cart.items.length > 0) {
+      syncWithServer({
+        items: data.cart.items as CartItem[],
+        orderNote: data.cart.orderNote || '',
+      });
+    }
+  }, [isSuccess, data, syncWithServer]);
+
+  // Return transformed data for easy consumption
+  return {
+    ...query,
+    data: data
+      ? {
+          items: (data.cart.items as CartItem[]) ?? [],
+          total: data.cart.total ?? 0,
+          orderNote: data.cart.orderNote ?? '',
+          isGuest: data.isGuest ?? true,
+          message: data.message,
+        }
+      : undefined,
+  };
 };
-
-
 
 export const useAddToCart = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({
-      menuItemId,
-      quantity = 1,
-    }: {
+    mutationFn: async (payload: {
       menuItemId: string;
       quantity?: number;
+      sides?: string[];
+      drinks?: string[];
+      addOns?: string[];
+      specialInstructions?: string;
+      orderNote?: string;
     }) => {
-      return await apiClient.post('/cart', { menuItemId, quantity });
+      return await apiClient.post<CartResponse>('/cart', payload);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: CART_QUERY_KEY });
@@ -48,28 +70,28 @@ export const useAddToCart = () => {
   });
 };
 
-export const useUpdateCartQuantity = () => {
+export const useUpdateCartItem = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async ({
       itemId,
-      quantity,
+      updates,
     }: {
       itemId: string;
-      quantity: number;
+      updates: {
+        quantity?: number;
+        sides?: string[];
+        drinks?: string[];
+        addOns?: string[];
+        specialInstructions?: string;
+        orderNote?: string;
+      };
     }) => {
-      if (!itemId || itemId === 'undefined') {
-        console.error('Attempted to update cart item with invalid ID:', itemId);
-        throw new Error('Invalid cart item ID');
-      }
-      return await apiClient.patch(`/cart/item/${itemId}`, { quantity });
+      return await apiClient.patch<CartResponse>(`/cart/item/${itemId}`, updates);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: CART_QUERY_KEY });
-    },
-    onError: (error) => {
-      console.error('Failed to update cart quantity:', error);
     },
   });
 };
@@ -79,17 +101,10 @@ export const useRemoveFromCart = () => {
 
   return useMutation({
     mutationFn: async (itemId: string) => {
-      if (!itemId || itemId === 'undefined') {
-        console.error('Attempted to remove cart item with invalid ID:', itemId);
-        throw new Error('Invalid cart item ID');
-      }
-      return await apiClient.delete(`/cart/item/${itemId}`);
+      return await apiClient.delete<CartResponse>(`/cart/item/${itemId}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: CART_QUERY_KEY });
-    },
-    onError: (error) => {
-      console.error('Failed to remove cart item:', error);
     },
   });
 };
@@ -99,7 +114,7 @@ export const useClearCart = () => {
 
   return useMutation({
     mutationFn: async () => {
-      return await apiClient.delete('/cart/clear');
+      return await apiClient.delete<CartResponse>('/cart/clear');
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: CART_QUERY_KEY });

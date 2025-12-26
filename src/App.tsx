@@ -8,13 +8,13 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { HelmetProvider } from "react-helmet-async";
-
+import { SocketProvider } from '@/context/SocketContext'; // ← ADD THIS
 // Layouts
 import { PublicLayout } from "./components/PublicLayout";
 import AdminLayout from "./components/admin/AdminLayout";
 import RiderLayout from "./components/rider/RiderLayout";
 import { KitchenLayout } from "./components/KitchenLayout"; // ← ADD THIS
-
+import KitchenDisplay from "./pages/kitchen/KitchenDisplay";
 // Public Pages
 import Index from "./pages/Index";
 import Home from "./pages/Home";
@@ -52,7 +52,7 @@ import OrderRefundRequestPage from "@/features/orders/pages/OrderRefundRequestPa
 import AddressListPage from "@/features/address/pages/AddressListPage";
 
 // Admin
-import AdminLogin from "./pages/admin/Login";
+
 import AdminDashboard from "./pages/admin/Dashboard";
 import AdminOrders from "./pages/admin/orders/Orders";
 import AdminOrderDetails from "./pages/admin/orders/OrderDetails";
@@ -107,7 +107,9 @@ export default function App() {
           <Toaster />
           <Sonner />
 
+<SocketProvider>  
           <BrowserRouter>
+          
             <Routes>
               {/* ====================== PUBLIC ROUTES ====================== */}
               <Route element={<PublicLayout />}>
@@ -149,36 +151,35 @@ export default function App() {
               </Route>
 
               {/* ====================== ADMIN ROUTES ====================== */}
-              <Route path="/admin/login" element={<AdminLogin />} />
               <Route path="/admin" element={<AdminLayout />}>
-                <Route index element={<AdminDashboard />} />
-                <Route path="dashboard" element={<AdminDashboard />} />
-                <Route path="users" element={<AdminUsers />} />
-                <Route path="riders" element={<AdminRiders />} />
-                <Route path="deals" element={<AdminDeals />} />
-                <Route path="menu" element={<AdminMenuPage />} />
-                <Route path="menu/edit/:id" element={<EditMenuItemPage />} />
-                <Route path="areas" element={<AdminAreasList />} />
-                <Route path="areas/add" element={<AdminAddArea />} />
-                <Route path="areas/edit/:id" element={<AdminEditArea />} />
-                <Route path="orders" element={<AdminOrders />} />
-                <Route path="orders/:orderId" element={<AdminOrderDetails />} />
-                <Route path="contact" element={<ContactMessagesPage />} />
-                <Route path="customers" element={<CustomerList />} />
-                <Route path="staff" element={<StaffList />} />
-                <Route path="inventory" element={<InventoryList />} />
-                <Route path="analytics" element={<AnalyticsPage />} />
-                {/* ====================== ADMIN REVIEWS DASHBOARD ====================== */}
-                <Route path="reviews" element={<AdminReviewsDashboard />} />
-                
-              </Route>
+  <Route index element={<AdminDashboard />} />
+  <Route path="dashboard" element={<AdminDashboard />} />
+  <Route path="users" element={<AdminUsers />} />
+  <Route path="riders" element={<AdminRiders />} />
+  <Route path="deals" element={<AdminDeals />} />
+  <Route path="menu" element={<AdminMenuPage />} />
+  <Route path="menu/edit/:id" element={<EditMenuItemPage />} />
+  <Route path="areas" element={<AdminAreasList />} />
+  <Route path="areas/add" element={<AdminAddArea />} />
+  <Route path="areas/edit/:id" element={<AdminEditArea />} />
+  <Route path="orders" element={<AdminOrders />} />
+  <Route path="orders/:orderId" element={<AdminOrderDetails />} />
+  <Route path="contact" element={<ContactMessagesPage />} />
+  <Route path="customers" element={<CustomerList />} />
+  <Route path="staff" element={<StaffList />} />
+  <Route path="inventory" element={<InventoryList />} />
+  <Route path="analytics" element={<AnalyticsPage />} />
+  <Route path="reviews" element={<AdminReviewsDashboard />} />
 
-              {/* ====================== KITCHEN ROUTES ====================== */}
-              <Route element={<KitchenLayout />}>
-                <Route path="/kitchen" element={<KitchenDashboard />} />
-                {/* Add more kitchen routes here in the future */}
-              </Route>
+  ✅ ADD THIS
+  <Route path="kitchen" element={<KitchenDisplay />} />
+</Route>
 
+              {/* ====================== KITCHEN ROUTE ====================== */}
+                <Route path="/kitchen" element={<KitchenLayout />}>
+                  <Route index element={<KitchenDashboard />} />
+                </Route>
+              
               {/* ====================== RIDER ROUTES ====================== */}
               <Route path="/rider/login" element={<RiderLogin />} />
               <Route path="/rider" element={<RiderLayout />}>
@@ -190,6 +191,7 @@ export default function App() {
               <Route path="*" element={<NotFound />} />
             </Routes>
           </BrowserRouter>
+           </SocketProvider>
         </TooltipProvider>
       </QueryClientProvider>
     </HelmetProvider>

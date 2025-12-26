@@ -1,13 +1,14 @@
 // src/components/menu/MenuItemCard.tsx
-import { Plus, Leaf, Flame } from 'lucide-react';
+// PRODUCTION-READY — Integrates with AddToCartModal for full customization
+
+import { useState } from 'react';
+import { Leaf, Flame } from 'lucide-react';
+
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { toast } from 'sonner';
 
-import { useAddToCart } from '@/features/cart/hooks/useServerCart';
-import { useCartStore } from '@/features/cart/hooks/useCartStore';
-import { useAuthStore } from '@/features/auth/store/authStore';
+import { AddToCartModal } from '@/features/cart/components/AddToCartModal';
 
 import type { MenuItem } from '@/features/menu/types/menu.types';
 
@@ -17,92 +18,87 @@ interface MenuItemCardProps {
 }
 
 export function MenuItemCard({ item, className = '' }: MenuItemCardProps) {
-  const { user } = useAuthStore();
-  const addToGuestCart = useCartStore((s) => s.addItem);
-  const { mutate: addToServerCart, isPending } = useAddToCart();
+  const [modalOpen, setModalOpen] = useState(false);
 
-  // Safe rendering helpers - prevents "Objects are not valid as React child" error
+  // Safe rendering helpers
   const safeName = String(item.name || 'Unnamed Item');
   const safeDescription = String(item.description || 'Delicious item from our menu');
   const safePrice = Number(item.price || 0);
-  const safeImage = String(item.image || '/placeholder-food.jpg');
+  const safeImage = item.image || '/placeholder-food.jpg';
 
-  const handleAddToCart = () => {
+  const handleOpenCustomization = () => {
     if (!item.isAvailable) return;
-
-    if (user) {
-      addToServerCart(
-        { menuItemId: item._id, quantity: 1 },
-        {
-          onSuccess: () => toast.success(`${safeName} added to cart!`),
-          onError: () => toast.error('Failed to add item'),
-        }
-      );
-    } else {
-      addToGuestCart(
-        {
-          _id: item._id,
-          name: safeName,
-          price: safePrice,
-          image: safeImage,
-          isAvailable: true,
-        },
-        1
-      );
-      toast.success(`${safeName} added to cart!`);
-    }
+    setModalOpen(true);
   };
 
   return (
-    <Card className={`group overflow-hidden bg-card border-border/50 ${className}`}>
-      <div className="relative aspect-[4/3] overflow-hidden bg-muted">
-        <img
-          src={safeImage}
-          alt={safeName}
-          className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-          loading="lazy"
-        />
-        <div className="absolute top-2 left-2 flex flex-col gap-1.5">
-          {Boolean(item.isVeg) && (
-            <Badge variant="secondary" className="text-xs px-2 py-0.5">
-              <Leaf className="h-3 w-3 mr-1" /> Veg
+    <>
+      <Card
+        className={`group overflow-hidden bg-card border-border/50 cursor-pointer transition-all hover:shadow-lg ${className} ${
+          !item.isAvailable ? 'opacity-60' : ''
+        }`}
+        onClick={handleOpenCustomization}
+      >
+        <div className="relative aspect-[4/3] overflow-hidden bg-muted">
+          <img
+            src={safeImage}
+            alt={safeName}
+            className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110"
+            loading="lazy"
+          />
+
+          {/* Badges */}
+          <div className="absolute top-3 left-3 flex flex-col gap-2">
+            {item.isVeg && (
+              <Badge variant="secondary" className="text-xs px-2.5 py-1 shadow-md">
+                <Leaf className="h-3.5 w-3.5 mr-1" />
+                Veg
+              </Badge>
+            )}
+            {item.isSpicy && (
+              <Badge variant="destructive" className="text-xs px-2.5 py-1 shadow-md">
+                <Flame className="h-3.5 w-3.5 mr-1" />
+                Spicy
+              </Badge>
+            )}
+            {!item.isAvailable && (
+              <Badge variant="secondary" className="bg-gray-600 text-white text-xs px-3 py-1 shadow-md">
+                Unavailable
+              </Badge>
+            )}
+          </div>
+
+          {/* Price tag */}
+          <div className="absolute bottom-3 right-3">
+            <Badge variant="default" className="text-base font-bold px-4 py-2 shadow-lg">
+              Rs. {safePrice.toLocaleString()}
             </Badge>
-          )}
-          {Boolean(item.isSpicy) && (
-            <Badge variant="destructive" className="text-xs px-2 py-0.5">
-              <Flame className="h-3 w-3 mr-1" /> Spicy
-            </Badge>
-          )}
-          {!item.isAvailable && (
-            <Badge variant="secondary" className="bg-gray-500 text-white">
-              Unavailable
-            </Badge>
-          )}
+          </div>
         </div>
-      </div>
 
-      <CardContent className="p-4">
-        <div className="flex justify-between items-start mb-2">
-          <h3 className="font-semibold text-lg line-clamp-1">{safeName}</h3>
-          <span className="font-bold text-primary">
-            Rs. {safePrice.toLocaleString()}
-          </span>
-        </div>
+        <CardContent className="p-5">
+          <h3 className="font-bold text-xl mb-2 line-clamp-1">{safeName}</h3>
+          <p className="text-sm text-muted-foreground line-clamp-2 mb-4">
+            {safeDescription}
+          </p>
 
-        <p className="text-sm text-muted-foreground line-clamp-2 mb-4">
-          {safeDescription}
-        </p>
+          <Button
+            className="w-full"
+            size="lg"
+            disabled={!item.isAvailable}
+            variant={item.isAvailable ? "default" : "secondary"}
+          >
+            {item.isAvailable ? 'Customize & Add' : 'Currently Unavailable'}
+          </Button>
+        </CardContent>
+      </Card>
 
-        <Button
-          onClick={handleAddToCart}
-          disabled={!item.isAvailable || isPending}
-          className="w-full"
-          size="sm"
-        >
-          <Plus className="h-4 w-4 mr-1" />
-          {isPending ? 'Adding...' : 'Add to Cart'}
-        </Button>
-      </CardContent>
-    </Card>
+      {/* Customization Modal */}
+      <AddToCartModal
+        menuItemId={item._id}
+        open={modalOpen}
+        onOpenChange={setModalOpen}
+      />
+    </>
   );
 }

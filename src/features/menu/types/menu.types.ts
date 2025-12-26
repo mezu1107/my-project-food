@@ -9,10 +9,22 @@ export type MenuCategory =
   | 'desserts'
   | 'beverages';
 
+// NEW: Priced options for real-time customization pricing
+export interface PricedOption {
+  name: string;
+  price: number; // 0 = free
+}
+
+export interface PricedOptions {
+  sides: PricedOption[];
+  drinks: PricedOption[];
+  addOns: PricedOption[];
+}
+
 export interface MenuItem {
   _id: string;
   name: string;
-  description: string;
+  description: string; // backend always sends string (defaults to '' if empty)
   price: number;
   image: string;
   category: MenuCategory;
@@ -23,6 +35,9 @@ export interface MenuItem {
   createdAt: string;
   updatedAt: string;
   featured?: boolean;
+
+  // NEW: Optional priced customization options
+  pricedOptions?: PricedOptions;
 }
 
 export interface AreaInfo {
@@ -34,7 +49,7 @@ export interface AreaInfo {
 
 export interface DeliveryInfo {
   fee: number;
-  minOrder?: number; // Present only when delivery is active
+  minOrder?: number;
   estimatedTime: string;
 }
 
@@ -143,7 +158,7 @@ export interface MenuFilterParams {
   availableOnly?: boolean;
 }
 
-// ✅ FIXED: Safe string labels (prevents React crash)
+// Category labels and icons (unchanged)
 export const CATEGORY_LABELS: Record<MenuCategory, string> = {
   breakfast: 'Breakfast',
   lunch: 'Lunch',
@@ -152,7 +167,6 @@ export const CATEGORY_LABELS: Record<MenuCategory, string> = {
   beverages: 'Beverages',
 } as const;
 
-// ✅ Safe icons
 export const CATEGORY_ICONS: Record<MenuCategory, React.ElementType> = {
   breakfast: Coffee,
   lunch: ForkKnife,
@@ -161,7 +175,6 @@ export const CATEGORY_ICONS: Record<MenuCategory, React.ElementType> = {
   beverages: Glasses,
 } as const;
 
-// ✅ FIXED: Safe category options (no React components in text nodes)
 export const CATEGORY_OPTIONS: {
   value: MenuCategory;
   label: string;

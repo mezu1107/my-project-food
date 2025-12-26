@@ -1,57 +1,61 @@
 // src/types/cart.types.ts
 
+export interface PricedOption {
+  name: string;
+  price: number;
+}
 
+export interface PricedOptions {
+  sides: PricedOption[];
+  drinks: PricedOption[];
+  addOns: PricedOption[];
+}
+
+// The menu item as received from API (e.g. getSingleMenuItem)
+export interface MenuItem {
+  _id: string;
+  name: string;
+  price: number;
+  image?: string;
+  description?: string;
+  isVeg?: boolean;
+  isSpicy?: boolean;
+  isAvailable: boolean;
+  pricedOptions?: PricedOptions; // Optional — defaults to empty arrays
+}
+
+// Populated menu item inside cart items
 export interface MenuItemInCart {
   _id: string;
   name: string;
   price: number;
   image?: string;
   isAvailable?: boolean;
-  isVeg?: boolean;
-  isSpicy?: boolean;
 }
 
-// Used for logged-in users (items from MongoDB Cart document)
-export interface ServerCartItem {
-  _id: string;                    // subdocument _id from MongoDB
+// Extended cart item with full customization support
+export interface CartItem {
+  _id: string;
   menuItem: MenuItemInCart;
   quantity: number;
-  priceAtAdd: number;
+  priceAtAdd: number;           // Includes base price + paid extras
+  sides?: string[];             // e.g. ["Raita", "Custom: extra garlic"]
+  drinks?: string[];
+  addOns?: string[];
+  specialInstructions?: string;
   addedAt?: string;
 }
 
-// Used for guest users (items stored in session / local Zustand store)
-export interface GuestCartItem {
-  _id: string;                    // client-generated UUID
-  menuItem: MenuItemInCart;
-  quantity: number;
-  priceAtAdd: number;
-  addedAt?: string;               // optional, for consistency
+export interface CartData {
+  items: CartItem[];
+  total: number;
+  orderNote: string;
 }
 
-export type CartItem = ServerCartItem | GuestCartItem;
-
-// Exact shape returned by all cart endpoints
+// Full response from all cart endpoints
 export interface CartResponse {
   success: boolean;
-  message: string;
-  cart: {
-    items: ServerCartItem[];      // backend always returns populated ServerCartItem shape
-    total: number;
-  };
+  message?: string;
+  cart: CartData;
   isGuest: boolean;
 }
-
-// For empty cart responses (items: [], total: 0)
-export interface EmptyCartResponse {
-  success: boolean;
-  message: string;
-  cart: {
-    items: [];
-    total: 0;
-  };
-  isGuest: boolean;
-}
-
-// Union of possible cart responses
-export type AnyCartResponse = CartResponse | EmptyCartResponse;

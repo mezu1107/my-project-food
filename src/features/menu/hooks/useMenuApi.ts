@@ -19,6 +19,10 @@ import type {
 
 // ==================== PUBLIC HOOKS ====================
 
+// src/features/menu/hooks/useMenuApi.ts
+
+// ... imports remain the same
+
 export function useMenuByArea(areaId: string | undefined) {
   return useQuery({
     queryKey: ['menu', 'area', areaId],
@@ -26,7 +30,7 @@ export function useMenuByArea(areaId: string | undefined) {
     staleTime: 5 * 60 * 1000,
     queryFn: async () => {
       const response = await apiClient.get<MenuByAreaResponse>(`/menu/area/${areaId}`);
-      return response;
+      return response; // ← Fixed: no .data
     },
   });
 }
@@ -41,7 +45,7 @@ export function useMenuByLocation(lat: number | null, lng: number | null) {
       const response = await apiClient.get<MenuByLocationResponse>('/menu/location', {
         params: { lat, lng },
       });
-      return response;
+      return response; // ← Fixed
     },
   });
 }
@@ -52,7 +56,7 @@ export function useFullMenuCatalog() {
     staleTime: 5 * 60 * 1000,
     queryFn: async () => {
       const response = await apiClient.get<FullMenuCatalogResponse>('/menu/all');
-      return response;
+      return response; // ← Fixed
     },
   });
 }
@@ -64,7 +68,18 @@ export function useMenuItem(id: string | undefined) {
     staleTime: 10 * 60 * 1000,
     queryFn: async () => {
       const response = await apiClient.get<SingleMenuItemResponse>(`/menu/${id}`);
-      return response;
+      return response; // ← Fixed
+    },
+    select: (data) => {
+      if (!data.success || !data.item) return null;
+      return {
+        ...data.item,
+        pricedOptions: data.item.pricedOptions || {
+          sides: [],
+          drinks: [],
+          addOns: [],
+        },
+      };
     },
   });
 }
@@ -87,7 +102,7 @@ export function useMenuFilters(params: MenuFilterParams = {}) {
           availableOnly: params.availableOnly !== false ? 'true' : undefined,
         },
       });
-      return response;
+      return response; // ← Fixed
     },
     initialPageParam: 1,
     getNextPageParam: (lastPage) =>
@@ -96,18 +111,17 @@ export function useMenuFilters(params: MenuFilterParams = {}) {
   });
 }
 
-// ==================== ADMIN HOOKS ====================
-
 export function useAdminMenuItems() {
   return useQuery({
     queryKey: ['menu', 'admin', 'all'],
     staleTime: 60 * 1000,
     queryFn: async () => {
       const response = await apiClient.get<AdminMenuResponse>('/menu/admin/all');
-      return response;
+      return response; // ← Fixed
     },
   });
 }
+
 
 export function useCreateMenuItem() {
   const qc = useQueryClient();

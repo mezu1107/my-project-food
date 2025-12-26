@@ -35,7 +35,7 @@ const AdminLayout = () => {
   const handleLogout = () => {
     setCurrentUser(null);
     localStorage.removeItem("token");
-    navigate("/admin/login", { replace: true });
+    navigate("/login", { replace: true });
   };
 
   const navItems = [
@@ -46,15 +46,12 @@ const AdminLayout = () => {
     { icon: Tag, label: "Deals & Offers", path: "/admin/deals" },
     { icon: MapPin, label: "Delivery Areas", path: "/admin/areas" },
     { icon: UtensilsCrossed, label: "Menu Items", path: "/admin/menu" },
-    
-    // NEW: Reviews & Analytics Section
     { icon: Star, label: "Reviews", path: "/admin/reviews" },
     { icon: BarChart3, label: "Analytics", path: "/admin/analytics" },
-
     { icon: MessageSquare, label: "Contact Messages", path: "/admin/contact" },
     { icon: UserPlus, label: "Staff Promote", path: "/admin/staff" },
     { icon: Package, label: "Inventory Management", path: "/admin/inventory" },
-    { icon: Monitor, label: "Kitchen Display", path: "/kitchen" },
+    { icon: Monitor, label: "Kitchen Display", path: "/admin/kitchen" },
   ];
 
   const currentPageTitle =

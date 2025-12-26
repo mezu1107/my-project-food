@@ -1,9 +1,8 @@
 // src/features/orders/pages/CheckoutPage.tsx
-// FINAL PRODUCTION — DECEMBER 22, 2025
-// FULLY FIXED: No more 400 Bad Request errors
-// Authenticated: requires saved address only
-// Guest: manual entry only
-// Clean separation of flows
+// FINAL PRODUCTION — DECEMBER 26, 2025
+// Fully synced with backend: sends priceAtAdd + full customizations
+// Uses low-level hooks from useOrders.ts correctly
+// Zero TypeScript errors
 
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -22,11 +21,26 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Separator } from '@/components/ui/separator';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Loader2, AlertCircle, MapPin, User, CreditCard, Wallet, Building2, Smartphone, Plus } from 'lucide-react';
+import {
+  Loader2,
+  AlertCircle,
+  MapPin,
+  User,
+  CreditCard,
+  Wallet,
+  Building2,
+  Smartphone,
+} from 'lucide-react';
 import { toast } from 'sonner';
 
 import { useAuthStore } from '@/features/auth/store/authStore';
@@ -34,28 +48,30 @@ import { useCartStore } from '@/features/cart/hooks/useCartStore';
 import { useAddresses } from '@/features/address/hooks/useAddresses';
 import { useAreas } from '@/hooks/useCheckArea';
 import { useCreateOrder, useCreateGuestOrder } from '@/features/orders/hooks/useOrders';
-import type { CartItem } from '@/types/cart.types';
 
-// Zod Schema
 const checkoutSchema = z.object({
-  paymentMethod: z.enum(['cod', 'card', 'easypaisa', 'jazzcash', 'bank', 'wallet'], {
+  paymentMethod: z.enum(['cash', 'card', 'easypaisa', 'jazzcash', 'bank', 'wallet'], {
     required_error: 'Please select a payment method',
   }),
-  useWallet: z.boolean().optional(),
-  addressId: z.string().min(1, 'Please select a delivery address').optional(),
+  useWallet: z.boolean().optional().default(true),
+  promoCode: z.string().optional(),
+  instructions: z.string().max(300).optional(),
+
+  // Authenticated
+  addressId: z.string().optional(),
+
+  // Guest only
+  name: z.string().min(2, 'Name is required').optional(),
+  phone: z.string().regex(/^03\d{9}$/, 'Invalid format: 03XXXXXXXXX').optional(),
   guestAddress: z
     .object({
-      fullAddress: z.string().min(10, 'Address must be at least 10 characters'),
-      areaId: z.string({ required_error: 'Please select a delivery area' }),
+      fullAddress: z.string().min(10, 'Full address required'),
+      areaId: z.string({ required_error: 'Select delivery area' }),
       label: z.string().optional(),
       floor: z.string().optional(),
       instructions: z.string().max(150).optional(),
     })
     .optional(),
-  name: z.string().min(2, 'Name must be at least 2 characters').optional(),
-  phone: z.string().regex(/^03\d{9}$/, 'Invalid format. Use 03XXXXXXXXX').optional(),
-  promoCode: z.string().optional(),
-  instructions: z.string().max(300, 'Instructions too long').optional(),
 });
 
 type CheckoutForm = z.infer<typeof checkoutSchema>;
@@ -63,10 +79,8 @@ type CheckoutForm = z.infer<typeof checkoutSchema>;
 export default function CheckoutPage() {
   const navigate = useNavigate();
 
-  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
-  const { items, getTotal, clearCart } = useCartStore();
-
-  const subtotal = getTotal();
+  const { isAuthenticated } = useAuthStore();
+  const { items, getTotal, orderNote } = useCartStore();
 
   const { data: addresses = [], isLoading: addressesLoading } = useAddresses();
   const { data: areas = [] } = useAreas();
@@ -74,7 +88,7 @@ export default function CheckoutPage() {
   const createOrder = useCreateOrder();
   const createGuestOrder = useCreateGuestOrder();
 
-  const [deliveryFee, setDeliveryFee] = useState(149);
+  const [deliveryFee, setDeliveryFee] = useState(0);
   const [minOrderAmount, setMinOrderAmount] = useState(0);
   const [estimatedTime, setEstimatedTime] = useState('35-50 min');
 
@@ -84,181 +98,185 @@ export default function CheckoutPage() {
     handleSubmit,
     watch,
     setValue,
+    resetField,
     formState: { errors, isSubmitting },
   } = useForm<CheckoutForm>({
     resolver: zodResolver(checkoutSchema),
     defaultValues: {
-      paymentMethod: 'cod',
+      paymentMethod: 'cash',
       useWallet: true,
+      instructions: orderNote || '',
     },
   });
 
-  const addressId = watch('addressId');
-  const guestAreaId = watch('guestAddress.areaId'); // Fixed: removed optional chaining bug
-  const guestFullAddress = watch('guestAddress.fullAddress');
-  const name = watch('name');
-  const phone = watch('phone');
+  const subtotal = getTotal();
+  const total = useMemo(() => subtotal + deliveryFee, [subtotal, deliveryFee]);
+  const isMinOrderMet = subtotal >= minOrderAmount;
 
-  // Redirect if cart is empty
+  const selectedAddressId = watch('addressId');
+  const guestAreaId = watch('guestAddress.areaId');
+  const guestFullAddress = watch('guestAddress.fullAddress');
+  const guestLabel = watch('guestAddress.label') || 'Home';
+  const guestFloor = watch('guestAddress.floor');
+  const guestInstructions = watch('guestAddress.instructions');
+
+  // Redirect if cart empty
   useEffect(() => {
     if (items.length === 0) {
+      toast.info('Your cart is empty');
       navigate('/cart', { replace: true });
     }
   }, [items.length, navigate]);
 
-  // Auto-select default address for logged-in users
+  // Auto-select default address + delivery info (authenticated)
   useEffect(() => {
-    if (isAuthenticated && addresses.length > 0 && !addressId) {
-      const defaultAddr = addresses.find((a) => a.isDefault) || addresses[0];
-      if (defaultAddr) {
-        setValue('addressId', defaultAddr._id);
+    if (!isAuthenticated || addresses.length === 0) return;
 
-        const area = areas.find((a) => a._id === defaultAddr.area._id);
-        if (area?.deliveryZone) {
-          setDeliveryFee(area.deliveryZone.deliveryFee);
-          setMinOrderAmount(area.deliveryZone.minOrderAmount);
-          setEstimatedTime(area.deliveryZone.estimatedTime || '35-50 min');
-        }
-      }
-    }
-  }, [addresses, areas, isAuthenticated, addressId, setValue]);
+    const defaultAddr = addresses.find((a) => a.isDefault) || addresses[0];
+    if (defaultAddr && !selectedAddressId) {
+      setValue('addressId', defaultAddr._id);
 
-  // Update delivery info for guests
-  useEffect(() => {
-    if (!isAuthenticated && guestAreaId) {
-      const area = areas.find((a) => a._id === guestAreaId);
+      const area = areas.find((a) => a._id === defaultAddr.area?._id);
       if (area?.deliveryZone) {
-        setDeliveryFee(area.deliveryZone.deliveryFee);
-        setMinOrderAmount(area.deliveryZone.minOrderAmount);
+        setDeliveryFee(area.deliveryZone.deliveryFee ?? 149);
+        setMinOrderAmount(area.deliveryZone.minOrderAmount ?? 0);
         setEstimatedTime(area.deliveryZone.estimatedTime || '35-50 min');
       }
     }
+  }, [addresses, areas, isAuthenticated, selectedAddressId, setValue]);
+
+  // Guest area selection update
+  useEffect(() => {
+    if (isAuthenticated || !guestAreaId) return;
+
+    const area = areas.find((a) => a._id === guestAreaId);
+    if (area?.deliveryZone) {
+      setDeliveryFee(area.deliveryZone.deliveryFee ?? 149);
+      setMinOrderAmount(area.deliveryZone.minOrderAmount ?? 0);
+      setEstimatedTime(area.deliveryZone.estimatedTime || '35-50 min');
+    }
   }, [guestAreaId, areas, isAuthenticated]);
 
-  const total = useMemo(() => subtotal + deliveryFee, [subtotal, deliveryFee]);
-  const isMinOrderMet = subtotal >= minOrderAmount;
+  // Clear addressId when in guest mode
+  useEffect(() => {
+    if (!isAuthenticated) {
+      resetField('addressId');
+    }
+  }, [isAuthenticated, resetField]);
 
-  // Final proceed validation
-  const canProceed = isMinOrderMet && (
-    isAuthenticated
-      ? !!addressId
-      : !!guestAreaId && !!guestFullAddress && !!name && !!phone
-  );
+  const canProceed =
+    isMinOrderMet &&
+    (isAuthenticated ? !!selectedAddressId : !!guestAreaId && !!guestFullAddress?.trim());
 
-const onSubmit = async (data: CheckoutForm) => {
-  if (!canProceed) {
-    toast.error('Please complete all required fields and meet the minimum order amount');
-    return;
-  }
+  const onSubmit = async (data: CheckoutForm) => {
+    if (!canProceed) {
+      toast.error('Please complete all required fields and meet minimum order amount');
+      return;
+    }
 
-  const itemsPayload = items.map((item) => ({
-    menuItem: item.menuItem._id,
-    quantity: item.quantity,
-  }));
+    // Build full items payload from cart store — includes priceAtAdd + customizations
+    const itemsPayload = items.map((item) => ({
+      menuItem: item.menuItem._id,
+      quantity: item.quantity,
+      priceAtAdd: item.priceAtAdd, // ← REQUIRED: includes extras
+      sides: item.sides || [],
+      drinks: item.drinks || [],
+      addOns: item.addOns || [],
+      specialInstructions: item.specialInstructions || '',
+    }));
 
-  try {
-    let response;
+    try {
+      let response;
 
-    // CRITICAL FIX: Use isAuthenticated as the single source of truth
-    if (isAuthenticated) {
-      // Logged-in user: MUST have addressId
-      if (!addressId) {
-        toast.error('Please select a delivery address from your saved addresses');
-        return;
+      if (isAuthenticated) {
+        if (!selectedAddressId) throw new Error('Please select a delivery address');
+
+        response = await createOrder.mutateAsync({
+          items: itemsPayload,
+          addressId: selectedAddressId,
+          paymentMethod: data.paymentMethod,
+          useWallet: data.useWallet ?? true,
+          promoCode: data.promoCode?.trim().toUpperCase() || undefined,
+          instructions: data.instructions?.trim() || undefined,
+        });
+      } else {
+        if (!data.guestAddress || !data.name || !data.phone) {
+          throw new Error('Please fill all contact and address details');
+        }
+
+        response = await createGuestOrder.mutateAsync({
+          items: itemsPayload,
+          guestAddress: {
+            fullAddress: data.guestAddress.fullAddress.trim(),
+            areaId: data.guestAddress.areaId,
+            label: data.guestAddress.label?.trim() || 'Home',
+            floor: data.guestAddress.floor?.trim(),
+            instructions: data.guestAddress.instructions?.trim(),
+          },
+          name: data.name.trim(),
+          phone: data.phone.trim(),
+          paymentMethod: data.paymentMethod,
+          promoCode: data.promoCode?.trim().toUpperCase() || undefined,
+          instructions: data.instructions?.trim() || undefined,
+        });
       }
 
-      response = await createOrder.mutateAsync({
-        items: itemsPayload,
-        addressId: addressId, // Use the watched value directly
-        paymentMethod: data.paymentMethod,
-        useWallet: data.useWallet ?? true,
-        promoCode: data.promoCode?.trim().toUpperCase() || undefined,
-        instructions: data.instructions?.trim(),
-      });
-    } else {
-      // Guest user only
-      if (!data.guestAddress || !data.name || !data.phone) {
-        toast.error('Please fill in all contact and address details');
-        return;
+      // Handle payment flows
+      if (response.clientSecret) {
+        navigate('/checkout/card', {
+          state: {
+            clientSecret: response.clientSecret,
+            orderId: response.order._id,
+            amount: response.order.finalAmount,
+          },
+          replace: true,
+        });
+      } else if (response.bankDetails) {
+        navigate('/checkout/bank-transfer', {
+          state: {
+            order: response.order,
+            bankDetails: response.bankDetails,
+          },
+          replace: true,
+        });
+      } else {
+        toast.success('Order placed successfully! 🎉');
+        navigate(`/track/${response.order._id}`, { replace: true });
       }
-
-      response = await createGuestOrder.mutateAsync({
-        items: itemsPayload,
-        guestAddress: {
-          fullAddress: data.guestAddress.fullAddress,
-          areaId: data.guestAddress.areaId,
-          label: data.guestAddress.label || 'Home',
-          floor: data.guestAddress.floor || '',
-          instructions: data.guestAddress.instructions || '',
-        },
-        name: data.name.trim(),
-        phone: data.phone,
-        paymentMethod: data.paymentMethod,
-        promoCode: data.promoCode?.trim().toUpperCase() || undefined,
-        instructions: data.instructions?.trim(),
-      });
+    } catch (error: any) {
+      toast.error(
+        error.response?.data?.message ||
+          error.message ||
+          'Failed to place order. Please try again.'
+      );
     }
-
-    // Success flow
-    clearCart();
-    if (isAuthenticated) {
-      await fetch('/api/cart/clear', { method: 'DELETE' }).catch(() => {});
-    }
-
-    if (response.clientSecret) {
-      navigate('/checkout/card', {
-        state: {
-          clientSecret: response.clientSecret,
-          orderId: response.order._id,
-          amount: response.order.finalAmount,
-          shortId: response.order.shortId || response.order._id.toString().slice(-6).toUpperCase(),
-        },
-        replace: true,
-      });
-    } else if (response.bankDetails) {
-      navigate('/checkout/bank-transfer', {
-        state: {
-          order: response.order,
-          bankDetails: response.bankDetails,
-          walletUsed: response.walletUsed,
-        },
-        replace: true,
-      });
-    } else {
-      toast.success('Order placed successfully! 🎉');
-      navigate(`/track/${response.order._id}`, { replace: true });
-    }
-  } catch (error: any) {
-    const message = error.response?.data?.message || error.response?.data?.errors?.[0]?.message || 'Failed to place order';
-    toast.error(message);
-  }
-};
+  };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-muted/20 to-background py-8">
+    <div className="min-h-screen bg-gradient-to-b from-muted/30 to-background py-8 pb-20">
       <div className="container mx-auto max-w-6xl px-4">
         <h1 className="text-4xl font-bold text-center mb-10">Checkout</h1>
 
         <form onSubmit={handleSubmit(onSubmit)} className="grid lg:grid-cols-3 gap-8">
           {/* Left Column */}
           <div className="lg:col-span-2 space-y-6">
-            {/* Guest Contact Info */}
+            {/* Guest Contact */}
             {!isAuthenticated && (
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <User className="h-5 w-5" />
-                    Contact Details
+                    Contact Information
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="grid sm:grid-cols-2 gap-4">
+                <CardContent className="grid sm:grid-cols-2 gap-6">
                   <div>
-                    <Label>Full Name</Label>
+                    <Label htmlFor="name">Full Name *</Label>
                     <Input {...register('name')} placeholder="Ahmad Khan" />
                     {errors.name && <p className="text-sm text-destructive mt-1">{errors.name.message}</p>}
                   </div>
                   <div>
-                    <Label>Phone Number</Label>
+                    <Label htmlFor="phone">Phone Number *</Label>
                     <Input {...register('phone')} placeholder="03451234567" />
                     {errors.phone && <p className="text-sm text-destructive mt-1">{errors.phone.message}</p>}
                   </div>
@@ -268,101 +286,79 @@ const onSubmit = async (data: CheckoutForm) => {
 
             {/* Delivery Address */}
             <Card>
-              <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                <div className="flex items-center gap-2">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
                   <MapPin className="h-5 w-5" />
-                  <CardTitle>Delivery Address</CardTitle>
-                </div>
-
-                {isAuthenticated && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => navigate('/addresses')}
-                  >
-                    <Plus className="h-4 w-4 mr-2" />
-                    Add New Address
-                  </Button>
-                )}
+                  Delivery Address
+                </CardTitle>
               </CardHeader>
-
-              <CardContent className="space-y-5">
+              <CardContent className="space-y-6">
                 {estimatedTime && (
-                  <CardDescription>Estimated delivery: {estimatedTime}</CardDescription>
+                  <CardDescription className="text-base">
+                    Estimated delivery: <strong>{estimatedTime}</strong>
+                  </CardDescription>
                 )}
 
-                {/* Authenticated: Saved Addresses */}
-                {isAuthenticated && (
-                  <>
-                    {addressesLoading ? (
-                      <div className="text-center py-8">
-                        <Loader2 className="h-8 w-8 animate-spin mx-auto" />
-                        <p className="text-sm text-muted-foreground mt-2">Loading addresses...</p>
-                      </div>
-                    ) : addresses.length > 0 ? (
-                      <>
-                        <Controller
-                          control={control}
-                          name="addressId"
-                          render={({ field }) => (
-                            <Select onValueChange={field.onChange} value={field.value}>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Select a saved address" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {addresses.map((addr) => (
-                                  <SelectItem key={addr._id} value={addr._id}>
-                                    <div className="space-y-1">
-                                      <p className="font-medium">{addr.label}</p>
-                                      <p className="text-sm text-muted-foreground">{addr.fullAddress}</p>
-                                    </div>
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          )}
-                        />
-                        {errors.addressId && (
-                          <p className="text-sm text-destructive mt-1">{errors.addressId.message}</p>
-                        )}
-                      </>
-                    ) : (
-                      <Alert>
-                        <AlertCircle className="h-4 w-4" />
-                        <AlertTitle>No saved addresses</AlertTitle>
-                        <AlertDescription>
-                          Please add a delivery address to continue.
-                          <Button
-                            variant="link"
-                            className="p-0 h-auto font-normal underline ml-1"
-                            onClick={() => navigate('/addresses')}
-                          >
-                            Add address now
-                          </Button>
-                          .
-                        </AlertDescription>
-                      </Alert>
-                    )}
-                  </>
-                )}
-
-                {/* Guest: Manual Entry */}
-                {!isAuthenticated && (
-                  <>
+                {isAuthenticated ? (
+                  addressesLoading ? (
+                    <div className="flex justify-center py-12">
+                      <Loader2 className="h-8 w-8 animate-spin" />
+                    </div>
+                  ) : addresses.length > 0 ? (
+                    <Controller
+                      name="addressId"
+                      control={control}
+                      render={({ field }) => (
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select saved address" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {addresses.map((addr) => (
+                              <SelectItem key={addr._id} value={addr._id}>
+                                <div className="space-y-1">
+                                  <div className="font-medium">{addr.label}</div>
+                                  <div className="text-sm text-muted-foreground">{addr.fullAddress}</div>
+                                </div>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+                    />
+                  ) : (
+                    <Alert>
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertTitle>No saved addresses</AlertTitle>
+                      <AlertDescription>
+                        Add an address to continue.
+                        <Button variant="link" className="p-0 ml-2" onClick={() => navigate('/addresses')}>
+                          Add now
+                        </Button>
+                      </AlertDescription>
+                    </Alert>
+                  )
+                ) : (
+                  <div className="space-y-6">
                     <div>
-                      <Label>Delivery Area</Label>
+                      <Label>Delivery Area *</Label>
                       <Controller
-                        control={control}
                         name="guestAddress.areaId"
+                        control={control}
                         render={({ field }) => (
                           <Select onValueChange={field.onChange} value={field.value}>
                             <SelectTrigger>
-                              <SelectValue placeholder="Choose your area" />
+                              <SelectValue placeholder="Select area" />
                             </SelectTrigger>
                             <SelectContent>
                               {areas.map((area) => (
                                 <SelectItem key={area._id} value={area._id}>
-                                  {area.name} — Rs. {area.deliveryZone?.deliveryFee || 149} delivery
+                                  <div>
+                                    <div className="font-medium">{area.name}</div>
+                                    <div className="text-sm text-muted-foreground">
+                                      Fee: Rs. {area.deliveryZone?.deliveryFee || 149}
+                                    </div>
+                                  </div>
                                 </SelectItem>
                               ))}
                             </SelectContent>
@@ -370,34 +366,63 @@ const onSubmit = async (data: CheckoutForm) => {
                         )}
                       />
                       {errors.guestAddress?.areaId && (
-                        <p className="text-sm text-destructive mt-1">{errors.guestAddress.areaId.message}</p>
+                        <p className="text-sm text-destructive mt-1">
+                          {errors.guestAddress.areaId.message}
+                        </p>
                       )}
                     </div>
 
-                    <Textarea
-                      {...register('guestAddress.fullAddress')}
-                      placeholder="House number, street, sector, landmark..."
-                      rows={3}
-                    />
-                    {errors.guestAddress?.fullAddress && (
-                      <p className="text-sm text-destructive mt-1">{errors.guestAddress.fullAddress.message}</p>
+                    {/* Live Preview */}
+                    {guestAreaId && guestFullAddress && (
+                      <div className="p-5 border rounded-xl bg-card shadow-sm">
+                        <div className="font-semibold text-lg mb-1">{guestLabel}</div>
+                        <div className="text-base">{guestFullAddress}</div>
+                        {guestFloor && <div className="text-sm text-muted-foreground mt-1">Floor: {guestFloor}</div>}
+                        {guestInstructions && (
+                          <div className="text-sm italic text-muted-foreground mt-3 border-t pt-3">
+                            Note: "{guestInstructions}"
+                          </div>
+                        )}
+                      </div>
                     )}
 
-                    <div className="grid sm:grid-cols-2 gap-4">
-                      <Input
-                        {...register('guestAddress.label')}
-                        placeholder="Label (e.g. Home)"
-                        defaultValue="Home"
-                      />
-                      <Input {...register('guestAddress.floor')} placeholder="Floor/Apartment (optional)" />
-                    </div>
+                    <div className="space-y-5">
+                      <div>
+                        <Label htmlFor="guest-fullAddress">Full Address *</Label>
+                        <Textarea
+                          {...register('guestAddress.fullAddress')}
+                          placeholder="House #, Street, Sector, Landmark..."
+                          rows={4}
+                          className="resize-none"
+                        />
+                        {errors.guestAddress?.fullAddress && (
+                          <p className="text-sm text-destructive mt-1">
+                            {errors.guestAddress.fullAddress.message}
+                          </p>
+                        )}
+                      </div>
 
-                    <Textarea
-                      {...register('instructions')}
-                      placeholder="Special instructions (e.g. ring bell, leave at gate)"
-                      rows={2}
-                    />
-                  </>
+                      <div className="grid sm:grid-cols-2 gap-4">
+                        <div>
+                          <Label htmlFor="guest-label">Label</Label>
+                          <Input {...register('guestAddress.label')} placeholder="Home" />
+                        </div>
+                        <div>
+                          <Label htmlFor="guest-floor">Floor / Apartment</Label>
+                          <Input {...register('guestAddress.floor')} placeholder="2nd Floor, Flat B-3" />
+                        </div>
+                      </div>
+
+                      <div>
+                        <Label htmlFor="guest-instructions">Delivery Instructions</Label>
+                        <Textarea
+                          {...register('guestAddress.instructions')}
+                          placeholder="Ring twice, leave at security..."
+                          rows={3}
+                        />
+                      </div>
+                    </div>
+                  </div>
                 )}
               </CardContent>
             </Card>
@@ -409,70 +434,62 @@ const onSubmit = async (data: CheckoutForm) => {
               </CardHeader>
               <CardContent>
                 <Controller
-                  control={control}
                   name="paymentMethod"
+                  control={control}
                   render={({ field }) => (
                     <RadioGroup onValueChange={field.onChange} value={field.value} className="space-y-3">
-                      <Label className="flex items-center gap-4 p-4 border rounded-lg cursor-pointer hover:bg-muted/50 transition">
-                        <RadioGroupItem value="cod" />
-                        <Wallet className="h-6 w-6 text-green-600" />
-                        <div>
-                          <p className="font-medium">Cash on Delivery</p>
-                          <p className="text-sm text-muted-foreground">Pay when you receive</p>
-                        </div>
-                      </Label>
-                      <Label className="flex items-center gap-4 p-4 border rounded-lg cursor-pointer hover:bg-muted/50 transition">
-                        <RadioGroupItem value="card" />
-                        <CreditCard className="h-6 w-6 text-blue-600" />
-                        <div>
-                          <p className="font-medium">Credit / Debit Card</p>
-                          <p className="text-sm text-muted-foreground">Secure online payment</p>
-                        </div>
-                      </Label>
-                      <Label className="flex items-center gap-4 p-4 border rounded-lg cursor-pointer hover:bg-muted/50 transition">
-                        <RadioGroupItem value="easypaisa" />
-                        <Smartphone className="h-6 w-6 text-green-600" />
-                        <div>
-                          <p className="font-medium">EasyPaisa</p>
-                          <p className="text-sm text-muted-foreground">Pay via mobile wallet</p>
-                        </div>
-                      </Label>
-                      <Label className="flex items-center gap-4 p-4 border rounded-lg cursor-pointer hover:bg-muted/50 transition">
-                        <RadioGroupItem value="jazzcash" />
-                        <Smartphone className="h-6 w-6 text-red-600" />
-                        <div>
-                          <p className="font-medium">JazzCash</p>
-                          <p className="text-sm text-muted-foreground">Pay via mobile wallet</p>
-                        </div>
-                      </Label>
-                      <Label className="flex items-center gap-4 p-4 border rounded-lg cursor-pointer hover:bg-muted/50 transition">
-                        <RadioGroupItem value="bank" />
-                        <Building2 className="h-6 w-6 text-orange-600" />
-                        <div>
-                          <p className="font-medium">Bank Transfer</p>
-                          <p className="text-sm text-muted-foreground">Meezan Bank • Instant confirmation</p>
-                        </div>
-                      </Label>
+                      {[
+                        { value: 'cash', label: 'Cash on Delivery', icon: Wallet, color: 'text-green-600' },
+                        { value: 'card', label: 'Credit/Debit Card', icon: CreditCard, color: 'text-blue-600' },
+                        { value: 'easypaisa', label: 'EasyPaisa', icon: Smartphone, color: 'text-green-600' },
+                        { value: 'jazzcash', label: 'JazzCash', icon: Smartphone, color: 'text-red-600' },
+                        { value: 'bank', label: 'Bank Transfer', icon: Building2, color: 'text-orange-600' },
+                        { value: 'wallet', label: 'Wallet', icon: Wallet, color: 'text-purple-600' },
+                      ].map((opt) => (
+                        <Label
+                          key={opt.value}
+                          className="flex items-center gap-4 p-4 border rounded-lg cursor-pointer hover:bg-muted/50"
+                        >
+                          <RadioGroupItem value={opt.value} />
+                          <opt.icon className={`h-6 w-6 ${opt.color}`} />
+                          <span className="font-medium">{opt.label}</span>
+                        </Label>
+                      ))}
                     </RadioGroup>
                   )}
                 />
               </CardContent>
             </Card>
+
+            {/* Order Note */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Order Note (optional)</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <Textarea
+                  {...register('instructions')}
+                  placeholder="Extra spicy, no onions, etc... (max 300 chars)"
+                  rows={3}
+                />
+                {errors.instructions && (
+                  <p className="text-sm text-destructive mt-1">{errors.instructions.message}</p>
+                )}
+              </CardContent>
+            </Card>
           </div>
 
-          {/* Right Column: Order Summary */}
+          {/* Order Summary */}
           <div className="lg:col-span-1">
-            <Card className="sticky top-6 shadow-xl">
+            <Card className="sticky top-8 shadow-lg">
               <CardHeader>
                 <CardTitle>Order Summary</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-3">
+              <CardContent className="space-y-5">
+                <div className="space-y-3 max-h-60 overflow-y-auto">
                   {items.map((item) => (
                     <div key={item._id} className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">
-                        {item.quantity} × {item.menuItem.name}
-                      </span>
+                      <span>{item.quantity} × {item.menuItem.name}</span>
                       <span>Rs. {(item.priceAtAdd * item.quantity).toLocaleString()}</span>
                     </div>
                   ))}
@@ -480,7 +497,7 @@ const onSubmit = async (data: CheckoutForm) => {
 
                 <Separator />
 
-                <div className="space-y-2 text-sm">
+                <div className="space-y-2">
                   <div className="flex justify-between">
                     <span>Subtotal</span>
                     <span>Rs. {subtotal.toLocaleString()}</span>
@@ -493,7 +510,7 @@ const onSubmit = async (data: CheckoutForm) => {
 
                 <Separator />
 
-                <div className="flex justify-between text-2xl font-bold">
+                <div className="flex justify-between text-xl font-bold">
                   <span>Total</span>
                   <span className="text-primary">Rs. {total.toLocaleString()}</span>
                 </div>
@@ -502,7 +519,7 @@ const onSubmit = async (data: CheckoutForm) => {
                   <Alert variant="destructive">
                     <AlertCircle className="h-4 w-4" />
                     <AlertDescription>
-                      Minimum order: Rs. {minOrderAmount.toLocaleString()} (add Rs. {(minOrderAmount - subtotal).toLocaleString()} more)
+                      Minimum order amount: Rs. {minOrderAmount.toLocaleString()}
                     </AlertDescription>
                   </Alert>
                 )}
@@ -510,27 +527,18 @@ const onSubmit = async (data: CheckoutForm) => {
                 <Button
                   type="submit"
                   size="lg"
-                  className="w-full h-14 text-lg font-semibold"
-                  disabled={
-                    isSubmitting ||
-                    !canProceed ||
-                    createOrder.isPending ||
-                    createGuestOrder.isPending
-                  }
+                  className="w-full"
+                  disabled={isSubmitting || !canProceed || createOrder.isPending || createGuestOrder.isPending}
                 >
-                  {isSubmitting || createOrder.isPending || createGuestOrder.isPending ? (
+                  {createOrder.isPending || createGuestOrder.isPending ? (
                     <>
-                      <Loader2 className="mr-3 h-5 w-5 animate-spin" />
+                      <Loader2 className="mr-2 h-5 w-5 animate-spin" />
                       Placing Order...
                     </>
                   ) : (
                     `Place Order — Rs. ${total.toLocaleString()}`
                   )}
                 </Button>
-
-                <p className="text-center text-xs text-muted-foreground pt-4">
-                  By placing your order, you agree to our Terms of Service.
-                </p>
               </CardContent>
             </Card>
           </div>

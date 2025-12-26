@@ -58,8 +58,9 @@ export default function EditMenuItemPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
+  // Now returns MenuItem | null directly
   const {
-    data: itemData,
+    data: item,
     isLoading: itemLoading,
     isError: itemError,
   } = useMenuItem(id);
@@ -72,7 +73,6 @@ export default function EditMenuItemPage() {
 
   const updateMutation = useUpdateMenuItem();
 
-  const item = itemData?.item;
   const areas = areasData?.areas || [];
 
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -91,7 +91,7 @@ export default function EditMenuItemPage() {
     },
   });
 
-  // Sync form with fetched item
+  // Sync form when item loads
   useEffect(() => {
     if (item) {
       form.reset({
@@ -104,7 +104,7 @@ export default function EditMenuItemPage() {
         isAvailable: item.isAvailable ?? true,
         availableInAreas: item.availableInAreas || [],
       });
-      setPreviewUrl(item.image);
+      setPreviewUrl(item.image || null);
     }
   }, [item, form]);
 
@@ -137,7 +137,7 @@ export default function EditMenuItemPage() {
   };
 
   const onSubmit = (values: FormValues) => {
-    if (!id) return;
+    if (!id || !item) return;
 
     updateMutation.mutate(
       {

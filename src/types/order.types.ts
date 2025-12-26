@@ -1,16 +1,12 @@
 // src/types/order.types.ts
-// FINAL PRODUCTION — DECEMBER 21, 2025
-// FULLY SYNCED WITH BACKEND + REVIEW POPULATION SUPPORT
+// FINAL PRODUCTION — DECEMBER 27, 2025
+// Updated: Added 'totals' field for public tracking response
 
 import type { Address } from '@/features/address/types/address.types';
 import type { Review } from '@/features/reviews/types/review.types';
 
-/* =======================
-   PAYMENT & STATUS TYPES
-   ======================= */
-
 export type PaymentMethod =
-  | 'cod'
+  | 'cash'
   | 'card'
   | 'easypaisa'
   | 'jazzcash'
@@ -32,21 +28,24 @@ export type PaymentStatus =
   | 'paid'
   | 'failed'
   | 'canceled'
-  | 'refunded';
-
-/* =======================
-   ORDER CORE MODELS
-   ======================= */
+  | 'refunded'
+  | 'refund_pending';
 
 export interface OrderItem {
-  menuItem: {
+  _id?: string;
+  menuItem?: {
     _id: string;
     name: string;
-    price: number;
     image?: string;
   };
-  quantity: number;
+  name: string;
+  image?: string;
   priceAtOrder: number;
+  quantity: number;
+  sides?: string[];
+  drinks?: string[];
+  addOns?: string[];
+  specialInstructions?: string;
 }
 
 export interface GuestInfo {
@@ -55,10 +54,6 @@ export interface GuestInfo {
   isGuest: true;
 }
 
-/**
- * Guest checkout address snapshot
- * (embedded, not a saved Address document)
- */
 export interface AddressDetails {
   fullAddress: string;
   label: string;
@@ -76,13 +71,18 @@ export interface AppliedDeal {
   appliedDiscount: number;
 }
 
-/* =======================
-   ORDER ENTITY
-   ======================= */
+// === NEW: Totals object used in public tracking ===
+export interface OrderTotals {
+  totalAmount: number;
+  deliveryFee: number;
+  discountApplied: number;
+  walletUsed: number;
+  finalAmount: number;
+}
 
 export interface Order {
   _id: string;
-  shortId: string;
+  shortId?: string;
 
   items: OrderItem[];
 
@@ -94,35 +94,25 @@ export interface Order {
 
   guestInfo?: GuestInfo;
 
-  /**
-   * ✅ Authenticated users
-   * Populated Address document
-   */
   address?: Address;
+  addressDetails: AddressDetails;
 
-  /**
-   * ✅ Guest users
-   * Embedded address snapshot
-   */
-  addressDetails?: AddressDetails;
-
-  area: {
+  area?: {
     _id: string;
     name: string;
   };
 
-  deliveryZone: {
-    _id: string;
-    deliveryFee: number;
-    minOrderAmount: number;
-    estimatedTime?: string;
-  };
+  deliveryZone?: string;
 
-  totalAmount: number;
-  deliveryFee: number;
-  discountApplied: number;
-  walletUsed: number;
-  finalAmount: number;
+  // These are included in authenticated responses
+  totalAmount?: number;
+  deliveryFee?: number;
+  discountApplied?: number;
+  walletUsed?: number;
+  finalAmount?: number;
+
+  // Public tracking includes this nested object
+  totals?: OrderTotals;
 
   paymentMethod: PaymentMethod;
   paymentStatus: PaymentStatus;
@@ -130,49 +120,55 @@ export interface Order {
 
   bankTransferReference?: string;
   paymentIntentId?: string;
-  receiptUrl?: string;
 
   instructions?: string;
 
   placedAt: string;
+  updatedAt?: string;
   estimatedDelivery: string;
 
   appliedDeal?: AppliedDeal | null;
 
-  rider?: {
-    _id: string;
-    name: string;
-    phone: string;
-  } | null;
+  rider?:
+    | {
+        _id: string;
+        name: string;
+        phone: string;
+      }
+    | null;
 
-  /* Optional timestamps */
   confirmedAt?: string;
   preparingAt?: string;
   outForDeliveryAt?: string;
   deliveredAt?: string;
 
-  /**
-   * ✅ Populated by backend when a review exists for this order
-   * Used in customer dashboard & order history to show review status
-   */
   review?: Review | null;
 }
 
-/* =======================
-   CREATE ORDER PAYLOADS
-   ======================= */
+// ====================== PAYLOADS ======================
+
+export interface CreateOrderItemPayload {
+  menuItem: string;
+  quantity: number;
+  priceAtAdd: number; // ← REQUIRED: includes extras pricing
+  sides?: string[];
+  drinks?: string[];
+  addOns?: string[];
+  specialInstructions?: string;
+}
 
 export interface CreateOrderPayload {
-  items: { menuItem: string; quantity: number }[];
-  addressId: string;
+  items: CreateOrderItemPayload[];
+  addressId?: string; // Only for authenticated users
   paymentMethod?: PaymentMethod;
   promoCode?: string;
   useWallet?: boolean;
   instructions?: string;
 }
 
-export interface CreateGuestOrderPayload {
-  items: { menuItem: string; quantity: number }[];
+export interface CreateGuestOrderPayload extends Omit<CreateOrderPayload, 'addressId'> {
+  name: string;
+  phone: string;
   guestAddress: {
     fullAddress: string;
     areaId: string;
@@ -180,21 +176,13 @@ export interface CreateGuestOrderPayload {
     floor?: string;
     instructions?: string;
   };
-  name: string;
-  phone: string;
-  paymentMethod?: PaymentMethod;
-  promoCode?: string;
-  instructions?: string;
 }
 
-/* =======================
-   API RESPONSES
-   ======================= */
+// ====================== RESPONSE TYPES (Used in hooks) ======================
 
 export interface CreateOrderResponse {
   success: true;
   order: Order;
-  walletUsed: number;
   clientSecret?: string;
   bankDetails?: {
     bankName: string;
@@ -210,6 +198,11 @@ export interface CreateOrderResponse {
 export interface OrdersResponse {
   success: true;
   orders: Order[];
+  pagination?: {
+    page: number;
+    limit: number;
+    total: number;
+  };
 }
 
 export interface OrderResponse {
@@ -217,28 +210,20 @@ export interface OrderResponse {
   order: Order;
 }
 
-export interface GenericSuccessResponse {
-  success: true;
-  message: string;
-  order?: Order;
-}
+// ====================== CONSTANTS & HELPERS ======================
 
-/* =======================
-   STATUS HELPERS
-   ======================= */
-
-export const ORDER_STATUS_LABELS = {
+export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
   pending: 'Pending',
-  pending_payment: 'Payment Pending',
+  pending_payment: 'Awaiting Payment',
   confirmed: 'Confirmed',
   preparing: 'Preparing',
-  out_for_delivery: 'On the Way',
+  out_for_delivery: 'Out for Delivery',
   delivered: 'Delivered',
   cancelled: 'Cancelled',
   rejected: 'Rejected',
-} as const;
+};
 
-export const ORDER_STATUS_COLORS = {
+export const ORDER_STATUS_COLORS: Record<OrderStatus, string> = {
   pending: 'bg-yellow-500',
   pending_payment: 'bg-orange-500',
   confirmed: 'bg-blue-500',
@@ -247,32 +232,22 @@ export const ORDER_STATUS_COLORS = {
   delivered: 'bg-green-500',
   cancelled: 'bg-red-500',
   rejected: 'bg-red-600',
-} as const;
+};
 
-export const PAYMENT_STATUS_LABELS = {
+export const PAYMENT_STATUS_LABELS: Record<PaymentStatus, string> = {
   pending: 'Pending',
   paid: 'Paid',
   failed: 'Failed',
   canceled: 'Cancelled',
   refunded: 'Refunded',
-} as const;
-
-export const PAYMENT_STATUS_COLORS = {
-  pending: 'bg-gray-500',
-  paid: 'bg-green-500',
-  failed: 'bg-red-500',
-  canceled: 'bg-orange-500',
-  refunded: 'bg-purple-500',
-} as const;
+  refund_pending: 'Refund Pending',
+};
 
 export const getOrderStatusLabel = (status: OrderStatus): string =>
-  ORDER_STATUS_LABELS[status];
+  ORDER_STATUS_LABELS[status] || status;
 
 export const getOrderStatusColor = (status: OrderStatus): string =>
-  ORDER_STATUS_COLORS[status];
+  ORDER_STATUS_COLORS[status] || 'bg-gray-500';
 
 export const getPaymentStatusLabel = (status: PaymentStatus): string =>
-  PAYMENT_STATUS_LABELS[status];
-
-export const getPaymentStatusColor = (status: PaymentStatus): string =>
-  PAYMENT_STATUS_COLORS[status];
+  PAYMENT_STATUS_LABELS[status] || status;
