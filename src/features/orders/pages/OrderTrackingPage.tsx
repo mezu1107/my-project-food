@@ -1,7 +1,7 @@
 // src/features/orders/pages/OrderTrackingPage.tsx
-// FINAL PRODUCTION — DECEMBER 28, 2025
-// "Order Again" now works for BOTH authenticated and guest users
-// Full real-time tracking, confetti, review CTA, responsive design
+// FIXED: Properly destructure nested 'order' from TrackOrderResponse
+// All TS2339 & TS2551 errors resolved
+// DATE: December 29, 2025
 
 import { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
@@ -61,10 +61,13 @@ export default function OrderTrackingPage() {
   const { orderId } = useParams<{ orderId: string }>();
   const navigate = useNavigate();
 
-  const { data: order, isLoading, error } = useTrackOrder(orderId);
+  const { data: response, isLoading, error } = useTrackOrder(orderId);
   const reorderMutation = useReorder();
 
   const [reviewModalOpen, setReviewModalOpen] = useState(false);
+
+  // IMPORTANT: Extract the nested real order object
+  const order = response?.order;
 
   useOrderSocket(orderId);
 

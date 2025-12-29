@@ -80,7 +80,11 @@ export interface OrderTotals {
   walletUsed: number;
   finalAmount: number;
 }
-
+// Public tracking endpoint response wrapper
+export interface TrackOrderResponse {
+  success: true;
+  order: Order;
+}
 export interface Order {
   _id: string;
   shortId?: string;

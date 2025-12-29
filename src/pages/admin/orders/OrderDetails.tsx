@@ -1,7 +1,7 @@
 // src/pages/admin/orders/OrderDetails.tsx
-// PRODUCTION-READY — FULLY RESPONSIVE (320px → 4K)
-// Mobile-first admin order details with safe fallbacks and reject functionality
-// Fixed TypeScript errors: proper typing for address and safe optional chaining
+// FIXED: Slim address type for public tracking response + safe optional chaining
+// No more TS2339 on .floor, .fullAddress, etc.
+// Displays correct address data instead of N/A
 
 import { useParams, Link } from 'react-router-dom';
 import { format } from 'date-fns';
@@ -32,12 +32,19 @@ import {
   Loader2,
 } from 'lucide-react';
 
-import { 
-  useTrackOrder, 
+import {
+  useTrackOrder,
   downloadReceipt,
-  useAdminRejectOrder 
+  useAdminRejectOrder,
 } from '@/features/orders/hooks/useOrders';
 import { ORDER_STATUS_LABELS, ORDER_STATUS_COLORS } from '@/types/order.types';
+
+// Local slim type matching public tracking response shape
+interface TrackingAddress {
+  fullAddress: string;
+  label: string;
+  floor?: string;      // optional in tracking
+}
 
 const STATUS_ICONS = {
   pending: Clock,
@@ -50,22 +57,15 @@ const STATUS_ICONS = {
   rejected: XCircle,
 };
 
-// Proper interface for address details
-interface AddressDetails {
-  fullAddress?: string;
-  floor?: string;
-  instructions?: string;
-}
-
 export default function AdminOrderDetails() {
   const { orderId } = useParams<{ orderId: string }>();
-  const { data: order, isLoading } = useTrackOrder(orderId);
+  const { data: response, isLoading } = useTrackOrder(orderId);
   const adminRejectOrder = useAdminRejectOrder();
 
+  const order = response?.order;
+
   const handleDownloadReceipt = () => {
-    if (order?._id) {
-      downloadReceipt(order._id);
-    }
+    if (order?._id) downloadReceipt(order._id);
   };
 
   if (isLoading) {
@@ -100,16 +100,25 @@ export default function AdminOrderDetails() {
   const customerPhone = order.guestInfo?.phone || order.customer?.phone || 'N/A';
   const shortId = order.shortId || order._id.slice(-6).toUpperCase();
 
-  const subtotal = order.items?.reduce(
-    (acc, item) => acc + ((item.priceAtOrder ?? 0) * (item.quantity ?? 1)),
-    0
-  ) ?? 0;
+  const totals = order.totals ?? {
+    totalAmount: 0,
+    deliveryFee: 0,
+    discountApplied: 0,
+    walletUsed: 0,
+    finalAmount: 0,
+  };
 
   const paymentMethod = order.paymentMethod?.toUpperCase() || 'N/A';
 
-  // Safely extract address details with fallbacks
-  const addressDetails: AddressDetails = order.addressDetails ?? {};
-  const addressInstructions = order.instructions || addressDetails.instructions;
+  // Use correct nested address from tracking response
+  const address: TrackingAddress = order.address ?? {
+    fullAddress: '',
+    label: '',
+    floor: undefined,
+  };
+
+  // Instructions (order-level overrides)
+  const instructions = order.instructions || '';
 
   const isRejectable = !['delivered', 'cancelled', 'rejected'].includes(order.status);
 
@@ -131,9 +140,8 @@ export default function AdminOrderDetails() {
         <div className="flex flex-wrap justify-center gap-4">
           <Badge className={`text-base md:text-lg px-6 py-2 ${ORDER_STATUS_COLORS[order.status]} text-white`}>
             <StatusIcon className="h-5 w-5 mr-2" />
-            {ORDER_STATUS_LABELS[order.status] || 'Unknown Status'}
+            {ORDER_STATUS_LABELS[order.status] || order.status}
           </Badge>
-
           <Badge variant="outline" className="text-base md:text-lg px-4 py-2">
             {paymentMethod}
           </Badge>
@@ -169,7 +177,7 @@ export default function AdminOrderDetails() {
         </CardContent>
       </Card>
 
-      {/* Delivery Address */}
+      {/* Delivery Address – Now reads from correct nested address */}
       <Card className="mb-8 shadow-xl">
         <CardHeader>
           <CardTitle className="flex items-center gap-3 text-xl md:text-2xl">
@@ -179,15 +187,21 @@ export default function AdminOrderDetails() {
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-base md:text-lg leading-relaxed">
-            {addressDetails.fullAddress || 'N/A'}
+            {address.fullAddress || 'N/A'}
           </p>
-          {addressDetails.floor && (
-            <p className="text-muted-foreground">Floor: {addressDetails.floor}</p>
+
+          {address.label && address.label !== 'Work' && (  // optional: hide default label if unwanted
+            <p className="text-muted-foreground">Label: {address.label}</p>
           )}
-          {addressInstructions && (
+
+          {address.floor && (
+            <p className="text-muted-foreground">Floor: {address.floor}</p>
+          )}
+
+          {instructions && (
             <div className="p-4 bg-muted rounded-lg">
               <p className="font-medium mb-1">Special Instructions:</p>
-              <p className="italic">"{addressInstructions}"</p>
+              <p className="italic">"{instructions}"</p>
             </div>
           )}
         </CardContent>
@@ -237,11 +251,15 @@ export default function AdminOrderDetails() {
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="space-y-5">
-            {order.items?.map((item, i) => {
-              const itemName = item.menuItem?.name || 'Deleted Item';
-              const itemPrice = ((item.priceAtOrder ?? 0) * (item.quantity ?? 1));
+            {order.items?.map((item, index) => {
+              const itemName = item.name || 'Deleted / Unavailable Item';
+              const itemTotal = (item.priceAtOrder ?? 0) * (item.quantity ?? 1);
+
               return (
-                <div key={i} className="flex items-center justify-between py-4 border-b last:border-0">
+                <div
+                  key={index}
+                  className="flex items-center justify-between py-4 border-b last:border-0"
+                >
                   <div className="flex items-center gap-4">
                     <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center text-primary font-bold text-sm md:text-base">
                       {item.quantity ?? 1}
@@ -249,7 +267,7 @@ export default function AdminOrderDetails() {
                     <p className="font-medium text-base md:text-lg">{itemName}</p>
                   </div>
                   <p className="font-medium text-base md:text-lg">
-                    Rs. {itemPrice.toLocaleString()}
+                    Rs. {itemTotal.toLocaleString()}
                   </p>
                 </div>
               );
@@ -261,29 +279,29 @@ export default function AdminOrderDetails() {
           <div className="space-y-4 text-base md:text-lg">
             <div className="flex justify-between">
               <span>Subtotal</span>
-              <span>Rs. {subtotal.toLocaleString()}</span>
+              <span>Rs. {totals.totalAmount.toLocaleString()}</span>
             </div>
             <div className="flex justify-between">
               <span>Delivery Fee</span>
-              <span>Rs. {(order.deliveryFee ?? 0).toLocaleString()}</span>
+              <span>Rs. {totals.deliveryFee.toLocaleString()}</span>
             </div>
-            {order.discountApplied && order.discountApplied > 0 && (
+            {totals.discountApplied > 0 && (
               <div className="flex justify-between text-green-600 font-medium">
                 <span>Discount Applied</span>
-                <span>-Rs. {order.discountApplied.toLocaleString()}</span>
+                <span>-Rs. {totals.discountApplied.toLocaleString()}</span>
               </div>
             )}
-            {order.walletUsed && order.walletUsed > 0 && (
+            {totals.walletUsed > 0 && (
               <div className="flex justify-between text-blue-600 font-medium">
                 <span>Wallet Used</span>
-                <span>-Rs. {order.walletUsed.toLocaleString()}</span>
+                <span>-Rs. {totals.walletUsed.toLocaleString()}</span>
               </div>
             )}
             <Separator />
             <div className="flex justify-between text-2xl font-bold md:text-3xl pt-4">
               <span>Total Paid</span>
               <span className="text-primary">
-                Rs. {(order.finalAmount ?? 0).toLocaleString()}
+                Rs. {totals.finalAmount.toLocaleString()}
               </span>
             </div>
           </div>

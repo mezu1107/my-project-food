@@ -16,6 +16,7 @@ import type {
   CreateGuestOrderPayload,
   CreateOrderResponse,
   ReorderResponse,
+  TrackOrderResponse
 } from '@/types/order.types';
 
 // ============================================================
@@ -87,15 +88,17 @@ export const useOrderTimeline = (orderId: string | undefined) => {
 // PUBLIC TRACKING HOOKS
 // ============================================================
 
+// src/features/orders/hooks/useOrders.ts
+
 export const useTrackOrder = (orderId: string | undefined) => {
-  return useQuery<Order, Error>({
+  return useQuery<TrackOrderResponse, Error>({
     queryKey: ['track-order', orderId],
-    queryFn: async (): Promise<Order> => {
+    queryFn: async (): Promise<TrackOrderResponse> => {
       if (!orderId) throw new Error('Order ID is missing');
       if (!/^[0-9a-fA-F]{24}$/.test(orderId)) throw new Error('Invalid order ID format');
 
-      const { data } = await api.get<OrderResponse>(`/orders/track/${orderId}`);
-      return data.order;
+      const { data } = await api.get<TrackOrderResponse>(`/orders/track/${orderId}`);
+      return data;
     },
     enabled: !!orderId,
     staleTime: 30_000,
@@ -402,9 +405,10 @@ interface AdminOrdersResponse {
   success: true;
   orders: Order[];
   pagination: { page: number; limit: number; total: number };
+
 }
 
-export const useAdminOrders = (filters?: { status?: string; page?: number; limit?: number }) => {
+export const useAdminOrders = (filters?: { status?: string; page?: number; limit?: number;search?: string; }) => {
   const params = new URLSearchParams();
   if (filters?.status) params.append('status', filters.status);
   if (filters?.page) params.append('page', String(filters.page));
