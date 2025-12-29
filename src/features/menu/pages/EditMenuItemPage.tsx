@@ -1,8 +1,4 @@
-// src/features/menu/pages/admin/EditMenuItemPage.tsx
-// PRODUCTION-READY — FULLY RESPONSIVE (320px → 4K)
-// Mobile-first admin form, fluid layout, touch-friendly, accessible
-// Optimized image preview, scrollable areas list, responsive grid
-
+// src/pages/admin/EditMenuItemPage.tsx
 import { useEffect, useState, ChangeEvent } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { ArrowLeft, Loader2, Trash2, Globe, Upload } from "lucide-react";
@@ -16,7 +12,12 @@ import {
   useUpdateMenuItem,
   useAvailableAreas,
 } from "@/features/menu/hooks/useMenuApi";
-import { CATEGORY_OPTIONS, type MenuCategory } from "@/features/menu/types/menu.types";
+import {
+  CATEGORY_OPTIONS,
+  type MenuCategory,
+  ALLOWED_UNITS,
+  UNIT_LABELS,
+} from "@/features/menu/types/menu.types";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -48,6 +49,7 @@ const formSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
   description: z.string().optional(),
   price: z.coerce.number().min(1, "Price must be at least Rs. 1"),
+  unit: z.enum(ALLOWED_UNITS),
   category: z.enum(["breakfast", "lunch", "dinner", "desserts", "beverages"]),
   isVeg: z.boolean(),
   isSpicy: z.boolean(),
@@ -86,6 +88,7 @@ export default function EditMenuItemPage() {
       name: "",
       description: "",
       price: 0,
+      unit: "pc",
       category: "dinner" as MenuCategory,
       isVeg: false,
       isSpicy: false,
@@ -94,13 +97,13 @@ export default function EditMenuItemPage() {
     },
   });
 
-  // Sync form with loaded item
   useEffect(() => {
     if (item) {
       form.reset({
         name: item.name || "",
         description: item.description || "",
         price: item.price || 0,
+        unit: item.unit || "pc",
         category: item.category || "dinner",
         isVeg: !!item.isVeg,
         isSpicy: !!item.isSpicy,
@@ -149,6 +152,7 @@ export default function EditMenuItemPage() {
           name: values.name.trim(),
           description: values.description?.trim(),
           price: values.price,
+          unit: values.unit,
           category: values.category,
           isVeg: values.isVeg,
           isSpicy: values.isSpicy,
@@ -169,7 +173,6 @@ export default function EditMenuItemPage() {
     );
   };
 
-  // Loading state
   if (itemLoading || areasLoading) {
     return (
       <div className="flex h-screen items-center justify-center px-4">
@@ -181,7 +184,6 @@ export default function EditMenuItemPage() {
     );
   }
 
-  // Error or not found
   if (itemError || areasError || !item) {
     return (
       <main className="container mx-auto px-4 py-12 text-center md:py-20">
@@ -201,7 +203,6 @@ export default function EditMenuItemPage() {
 
   return (
     <main className="container mx-auto px-4 py-8 md:py-10 lg:py-12">
-      {/* Header */}
       <header className="mb-8 flex items-center gap-4">
         <Button
           variant="ghost"
@@ -217,7 +218,6 @@ export default function EditMenuItemPage() {
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-10">
           <div className="grid gap-8 lg:grid-cols-3">
-            {/* Image Card – full width on mobile, sidebar on lg+ */}
             <Card className="order-1 lg:order-2 lg:col-span-1">
               <CardHeader>
                 <CardTitle className="text-xl md:text-2xl">Item Image</CardTitle>
@@ -269,7 +269,6 @@ export default function EditMenuItemPage() {
               </CardContent>
             </Card>
 
-            {/* Details Card – full width on mobile, main column on lg+ */}
             <Card className="order-2 lg:order-1 lg:col-span-2">
               <CardHeader>
                 <CardTitle className="text-xl md:text-2xl">Item Details</CardTitle>
@@ -311,6 +310,35 @@ export default function EditMenuItemPage() {
                     )}
                   />
                 </div>
+
+                {/* Unit Selector */}
+                <FormField
+                  control={form.control}
+                  name="unit"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Unit *</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value} disabled={isSubmitting}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select unit" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {ALLOWED_UNITS.map((unit) => (
+                            <SelectItem key={unit} value={unit}>
+                              {UNIT_LABELS[unit]}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormDescription>
+                        Shown to customers (e.g., "per kg", "500ml")
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
                 <FormField
                   control={form.control}
@@ -448,7 +476,6 @@ export default function EditMenuItemPage() {
             </Card>
           </div>
 
-          {/* Action Buttons */}
           <div className="flex flex-col gap-4 border-t pt-8 sm:flex-row sm:justify-end">
             <Button
               type="button"

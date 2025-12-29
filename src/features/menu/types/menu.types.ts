@@ -10,11 +10,12 @@ export type MenuCategory =
   | 'beverages';
 
 // NEW: Priced options for real-time customization pricing
+// NEW: Priced options with unit support
 export interface PricedOption {
   name: string;
-  price: number; // 0 = free
+  price: number; 
+  unit?: string; 
 }
-
 export interface PricedOptions {
   sides: PricedOption[];
   drinks: PricedOption[];
@@ -24,9 +25,10 @@ export interface PricedOptions {
 export interface MenuItem {
   _id: string;
   name: string;
-  description: string; // backend always sends string (defaults to '' if empty)
+  description: string;
   price: number;
   image: string;
+ unit: Unit; // ← NEW: 'pc' | 'kg' | 'g' | 'ml' | 'liter' | 'bottle' etc.
   category: MenuCategory;
   isVeg: boolean;
   isSpicy: boolean;
@@ -36,9 +38,39 @@ export interface MenuItem {
   updatedAt: string;
   featured?: boolean;
 
-  // NEW: Optional priced customization options
+  // Optional priced customization options
   pricedOptions?: PricedOptions;
 }
+export const ALLOWED_UNITS = [
+  'pc',
+  'bottle',
+  'kg',
+  'g',
+  'slice',
+  'cup',
+  'ml',
+  'liter',
+  'pack',
+  'dozen',
+  'tray',
+] as const;
+
+export type Unit = typeof ALLOWED_UNITS[number];
+
+export const UNIT_LABELS: Record<Unit, string> = {
+  pc: 'Piece',
+  bottle: 'Bottle',
+  kg: 'Kilogram',
+  g: 'Gram',
+  slice: 'Slice',
+  cup: 'Cup',
+  ml: 'Milliliter',
+  liter: 'Liter',
+  pack: 'Pack',
+  dozen: 'Dozen',
+  tray: 'Tray',
+};
+
 
 export interface AreaInfo {
   _id: string;
@@ -119,6 +151,7 @@ export interface CreateMenuItemPayload {
   name: string;
   description?: string;
   price: number;
+  unit: Unit;
   category: MenuCategory;
   isVeg?: boolean;
   isSpicy?: boolean;
@@ -130,6 +163,7 @@ export interface UpdateMenuItemPayload {
   name?: string;
   description?: string;
   price?: number;
+  unit?: Unit;
   category?: MenuCategory;
   isVeg?: boolean;
   isSpicy?: boolean;

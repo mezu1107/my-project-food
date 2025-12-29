@@ -3,6 +3,7 @@
 // Fixed: TypeScript overload error in useOrderTimeline
 // Improved: Consistent typing, proper generics, reliable cart clearing
 
+// src/features/orders/hooks/useOrders.ts
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/features/auth/store/authStore';
@@ -16,8 +17,9 @@ import type {
   CreateGuestOrderPayload,
   CreateOrderResponse,
   ReorderResponse,
-  TrackOrderResponse
+  TrackOrderResponse,
 } from '@/types/order.types';
+
 
 // ============================================================
 // TIMELINE RESPONSE TYPE (moved here for clarity)
@@ -41,7 +43,6 @@ interface OrderTimelineResponse {
 
 export const useMyOrders = () => {
   const { isAuthenticated } = useAuthStore();
-
   return useQuery<Order[]>({
     queryKey: ['my-orders'],
     queryFn: async () => {
@@ -50,8 +51,6 @@ export const useMyOrders = () => {
     },
     enabled: isAuthenticated,
     staleTime: 30_000,
-    gcTime: 5 * 60_000,
-    refetchOnWindowFocus: true,
   });
 };
 
@@ -69,7 +68,7 @@ export const useOrder = (orderId: string | undefined) => {
   });
 };
 
-// FIXED: Proper generic typing on api.get()
+
 export const useOrderTimeline = (orderId: string | undefined) => {
   return useQuery<OrderTimelineResponse>({
     queryKey: ['order-timeline', orderId],
@@ -91,23 +90,16 @@ export const useOrderTimeline = (orderId: string | undefined) => {
 // src/features/orders/hooks/useOrders.ts
 
 export const useTrackOrder = (orderId: string | undefined) => {
-  return useQuery<TrackOrderResponse, Error>({
+  return useQuery<TrackOrderResponse>({
     queryKey: ['track-order', orderId],
-    queryFn: async (): Promise<TrackOrderResponse> => {
-      if (!orderId) throw new Error('Order ID is missing');
-      if (!/^[0-9a-fA-F]{24}$/.test(orderId)) throw new Error('Invalid order ID format');
-
+    queryFn: async () => {
+      if (!orderId) throw new Error('Order ID required');
       const { data } = await api.get<TrackOrderResponse>(`/orders/track/${orderId}`);
       return data;
     },
     enabled: !!orderId,
-    staleTime: 30_000,
-    gcTime: 10 * 60_000,
-    refetchOnWindowFocus: true,
-    retry: (count, error: any) => !(error.response?.status === 400 || error.response?.status === 404),
   });
 };
-
 export const useTrackOrdersByPhone = () => {
   return useMutation<OrdersResponse, Error, { phone: string }>({
     mutationFn: async ({ phone }) => {
@@ -144,60 +136,33 @@ const clearCartCompletely = () => {
 };
 
 export const useCreateOrder = () => {
-  const queryClient = useQueryClient();
-
+  const qc = useQueryClient();
+  const { clearCart } = useCartStore();
   return useMutation<CreateOrderResponse, Error, CreateOrderPayload>({
     mutationFn: async (payload) => {
       const { data } = await api.post<CreateOrderResponse>('/orders', payload);
       return data;
     },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['my-orders'] });
-      queryClient.invalidateQueries({ queryKey: ['cart'] });
-
-      clearCartCompletely();
-
-      toast.success('Order placed successfully!');
-
-      if (data.bankDetails) {
-        toast.info(
-          `Please transfer PKR ${data.bankDetails.amount} using reference: ${data.bankDetails.reference}`
-        );
-      }
-    },
-    onError: (error: any) => {
-      toast.error(error.response?.data?.message || 'Failed to place order');
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['my-orders'] });
+      clearCart();
     },
   });
 };
 
 export const useCreateGuestOrder = () => {
-  const queryClient = useQueryClient();
-
+  const qc = useQueryClient();
+  const { clearCart } = useCartStore();
   return useMutation<CreateOrderResponse, Error, CreateGuestOrderPayload>({
     mutationFn: async (payload) => {
       const { data } = await api.post<CreateOrderResponse>('/orders', payload);
       return data;
     },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['cart'] });
-
-      clearCartCompletely();
-
-      toast.success('Order placed successfully!');
-
-      if (data.bankDetails) {
-        toast.info(
-          `Transfer PKR ${data.bankDetails.amount} with reference: ${data.bankDetails.reference}`
-        );
-      }
-    },
-    onError: (error: any) => {
-      toast.error(error.response?.data?.message || 'Failed to place order');
+    onSuccess: () => {
+      clearCart();
     },
   });
 };
-
 // ============================================================
 // ORDER ACTIONS (Customer)
 // ============================================================
@@ -271,44 +236,20 @@ export const useRequestRefund = () => {
 };
 
 export const useReorder = () => {
-  const queryClient = useQueryClient();
+  const qc = useQueryClient();
   const { clearCart, addMultipleItems } = useCartStore();
-
   return useMutation<ReorderResponse, Error, string>({
     mutationFn: async (orderId) => {
       const { data } = await api.post<ReorderResponse>(`/orders/${orderId}/reorder`);
       return data;
     },
     onSuccess: (data) => {
-      const itemCount = data.cart.items.length;
-
-      // Always clear first — reorder replaces the cart
       clearCart();
-
-      if (itemCount > 0) {
+      if (data.cart.items.length > 0) {
         addMultipleItems(data.cart.items);
       }
-
-      // Invalidate server cart for logged-in users
-      queryClient.invalidateQueries({ queryKey: ['cart'] });
-
-      // User feedback
-      if (itemCount === 0) {
-        toast.warning('No items available to reorder');
-      } else {
-        const base = `Added ${itemCount} item${itemCount > 1 ? 's' : ''} to cart!`;
-        if (data.skippedItems && data.skippedItems > 0) {
-          toast.success(`${base} (${data.skippedItems} unavailable)`);
-        } else {
-          toast.success(base);
-        }
-      }
-    },
-    onError: (error: any) => {
-      toast.error(
-        error.response?.data?.message ||
-        'Failed to reorder items'
-      );
+      qc.invalidateQueries({ queryKey: ['cart'] });
+      toast.success(data.message);
     },
   });
 };
@@ -316,11 +257,19 @@ export const useReorder = () => {
 // UTILITIES
 // ============================================================
 
+// ============================================================
+// UTILITIES
+// ============================================================
+
 export const downloadReceipt = async (orderId: string) => {
   try {
-    const response = await api.get(`/orders/${orderId}/receipt`, { responseType: 'blob' });
+    const response = await api.get(`/orders/${orderId}/receipt`, {
+      responseType: 'blob',
+    });
+
     const blob = response.data as Blob;
     const url = window.URL.createObjectURL(blob);
+
     const link = document.createElement('a');
     link.href = url;
     link.download = `AMFoods-Receipt-#${orderId.slice(-6).toUpperCase()}.pdf`;
@@ -328,12 +277,13 @@ export const downloadReceipt = async (orderId: string) => {
     link.click();
     document.body.removeChild(link);
     window.URL.revokeObjectURL(url);
-    toast.success('Receipt downloaded');
+
+    toast.success('Receipt downloaded successfully');
   } catch (error: any) {
+    console.error('Receipt download failed:', error);
     toast.error(error.response?.data?.message || 'Failed to download receipt');
   }
 };
-
 // ============================================================
 // ADMIN / KITCHEN / RIDER
 // ============================================================

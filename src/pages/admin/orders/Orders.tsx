@@ -1,8 +1,12 @@
 // src/pages/admin/orders/Orders.tsx
+// PRODUCTION-READY — DECEMBER 29, 2025
+// Admin orders dashboard: search, filter, pagination, unit display
+// Fully responsive, mobile-first, professional design
+
 import { useState, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { format } from 'date-fns';
-import debounce from 'lodash.debounce'; // or use your own debounce
+import debounce from 'lodash.debounce';
 
 import {
   Card,
@@ -40,12 +44,15 @@ import {
   XCircle,
   User,
   Phone,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 
 import { useAdminOrders } from '@/features/orders/hooks/useOrders';
 import {
   ORDER_STATUS_LABELS,
   ORDER_STATUS_COLORS,
+  UNIT_LABELS,
 } from '@/types/order.types';
 
 const STATUS_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -64,14 +71,13 @@ const ITEMS_PER_PAGE = 20;
 export default function AdminOrders() {
   const [searchParams, setSearchParams] = useSearchParams();
 
-  // Read filters from URL (great for sharing & back/forward)
   const currentPage = Number(searchParams.get('page')) || 1;
   const currentStatus = searchParams.get('status') || 'all';
   const currentSearch = searchParams.get('q') || '';
 
-  // Local input state + debounced URL update
   const [searchInput, setSearchInput] = useState(currentSearch);
 
+  // Debounced search update
   useEffect(() => {
     const handler = debounce((value: string) => {
       setSearchParams(
@@ -82,12 +88,12 @@ export default function AdminOrders() {
           } else {
             next.delete('q');
           }
-          next.set('page', '1'); // reset pagination on search
+          next.set('page', '1');
           return next;
         },
         { replace: true }
       );
-    }, 450);
+    }, 500);
 
     handler(searchInput);
     return () => handler.cancel();
@@ -97,7 +103,7 @@ export default function AdminOrders() {
     status: currentStatus === 'all' ? undefined : currentStatus,
     page: currentPage,
     limit: ITEMS_PER_PAGE,
-    search: currentSearch || undefined, // ← this is the key change
+    search: currentSearch || undefined,
   });
 
   const orders = data?.orders ?? [];
@@ -114,34 +120,42 @@ export default function AdminOrders() {
     });
   };
 
+  const handlePageChange = (page: number) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set('page', String(page));
+      return next;
+    });
+  };
+
   return (
     <main className="container mx-auto px-4 py-6 md:py-10 max-w-7xl">
       {/* Header */}
-      <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6 mb-8">
+      <header className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 mb-8">
         <div>
-          <h1 className="text-3xl font-bold flex items-center gap-3">
-            <Package className="h-9 w-9 text-primary" />
+          <h1 className="text-3xl md:text-4xl font-bold flex items-center gap-4">
+            <Package className="h-10 w-10 text-primary" />
             All Orders
           </h1>
-          <p className="text-muted-foreground mt-1.5">
-            {pagination ? `${pagination.total.toLocaleString()} orders` : 'Loading...'}
+          <p className="text-muted-foreground mt-2 text-lg">
+            {pagination ? `${pagination.total.toLocaleString()} total orders` : 'Loading orders...'}
           </p>
         </div>
 
-        <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto">
+        <div className="flex flex-col sm:flex-row gap-4 w-full lg:w-auto">
           <div className="relative flex-1 min-w-64">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
             <Input
-              placeholder="Search ID, name, phone..."
+              placeholder="Search by ID, name, phone..."
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
-              className="pl-10 h-10"
+              className="pl-11 h-12 text-base"
             />
           </div>
 
           <Select value={currentStatus} onValueChange={handleStatusChange}>
-            <SelectTrigger className="w-full sm:w-56 h-10">
-              <SelectValue placeholder="Filter by status" />
+            <SelectTrigger className="w-full sm:w-64 h-12">
+              <SelectValue placeholder="All statuses" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Statuses</SelectItem>
@@ -158,39 +172,39 @@ export default function AdminOrders() {
         </div>
       </header>
 
-      <Card>
+      <Card className="shadow-xl">
         <CardHeader className="pb-4">
-          <CardTitle>Orders</CardTitle>
+          <CardTitle className="text-2xl">Orders List</CardTitle>
         </CardHeader>
 
-        <CardContent>
+        <CardContent className="p-0">
           {(isLoading || isFetching) && !orders.length ? (
-            <div className="space-y-3">
-              {Array.from({ length: 8 }).map((_, i) => (
-                <Skeleton key={i} className="h-16 w-full rounded" />
+            <div className="space-y-4 p-6">
+              {Array.from({ length: 10 }).map((_, i) => (
+                <Skeleton key={i} className="h-20 w-full rounded-lg" />
               ))}
             </div>
           ) : orders.length === 0 ? (
-            <div className="py-16 text-center text-muted-foreground">
-              <Package className="mx-auto h-16 w-16 mb-4 opacity-40" />
-              <p className="text-lg font-medium">No orders found</p>
+            <div className="py-20 text-center">
+              <Package className="mx-auto h-20 w-20 text-muted-foreground/40 mb-6" />
+              <p className="text-xl font-medium text-muted-foreground">No orders found</p>
               {(currentSearch || currentStatus !== 'all') && (
-                <p className="mt-2 text-sm">Try changing the filters</p>
+                <p className="mt-3 text-base text-muted-foreground">Try adjusting your filters</p>
               )}
             </div>
           ) : (
             <>
-              <div className="rounded-md border overflow-x-auto">
+              <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-28">Order</TableHead>
+                    <TableRow className="bg-muted/50">
+                      <TableHead className="w-32">Order ID</TableHead>
                       <TableHead>Customer</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Items</TableHead>
                       <TableHead>Amount</TableHead>
                       <TableHead>Placed</TableHead>
-                      <TableHead className="text-right pr-6">Actions</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -201,26 +215,27 @@ export default function AdminOrders() {
                       const customerPhone =
                         order.guestInfo?.phone || order.customer?.phone || '—';
                       const amount = order.finalAmount || 0;
+                      const shortId = order.shortId || `#${order._id.slice(-8).toUpperCase()}`;
 
                       return (
-                        <TableRow key={order._id} className="hover:bg-muted/50">
-                          <TableCell className="font-medium">
+                        <TableRow key={order._id} className="hover:bg-muted/30 transition-colors">
+                          <TableCell className="font-bold">
                             <Link
                               to={`/admin/orders/${order._id}`}
                               className="text-primary hover:underline"
                             >
-                              #{order.shortId || order._id.slice(-8).toUpperCase()}
+                              {shortId}
                             </Link>
                           </TableCell>
 
                           <TableCell>
-                            <div className="space-y-0.5">
-                              <div className="flex items-center gap-1.5">
-                                <User className="h-3.5 w-3.5 opacity-70" />
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-2">
+                                <User className="h-4 w-4 opacity-70" />
                                 <span className="font-medium">{customerName}</span>
                               </div>
-                              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                                <Phone className="h-3.5 w-3.5 opacity-70" />
+                              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                <Phone className="h-4 w-4 opacity-70" />
                                 {customerPhone}
                               </div>
                             </div>
@@ -228,30 +243,48 @@ export default function AdminOrders() {
 
                           <TableCell>
                             <Badge
-                              className={`${
-                                ORDER_STATUS_COLORS[order.status] || 'bg-gray-500'
-                              } text-white`}
+                              className={`${ORDER_STATUS_COLORS[order.status]} text-white font-medium px-3 py-1`}
                             >
-                              <StatusIcon className="mr-1.5 h-3.5 w-3.5" />
-                              {ORDER_STATUS_LABELS[order.status] || order.status}
+                              <StatusIcon className="mr-2 h-4 w-4" />
+                              {ORDER_STATUS_LABELS[order.status]}
                             </Badge>
                           </TableCell>
 
-                          <TableCell>{order.items?.length || 0}</TableCell>
+                          <TableCell>
+                            <div className="space-y-2">
+                              {order.items.slice(0, 3).map((item, i) => (
+                                <div key={i} className="text-sm">
+                                  <span className="font-medium">
+                                    {item.quantity}x {item.name}
+                                  </span>
+                                  <Badge variant="outline" className="ml-2 text-xs">
+                                    {UNIT_LABELS[item.unit] || item.unit}
+                                  </Badge>
+                                </div>
+                              ))}
+                              {order.items.length > 3 && (
+                                <p className="text-xs text-muted-foreground">
+                                  +{order.items.length - 3} more
+                                </p>
+                              )}
+                            </div>
+                          </TableCell>
 
-                          <TableCell className="font-medium">
+                          <TableCell className="font-bold text-lg">
                             Rs. {amount.toLocaleString()}
                           </TableCell>
 
                           <TableCell className="text-sm text-muted-foreground">
-                            {order.placedAt
-                              ? format(new Date(order.placedAt), 'dd MMM • HH:mm')
-                              : '—'}
+                            {format(new Date(order.placedAt), 'dd MMM yyyy')}
+                            <br />
+                            {format(new Date(order.placedAt), 'HH:mm')}
                           </TableCell>
 
-                          <TableCell className="text-right pr-6">
-                            <Button variant="ghost" size="sm" asChild>
-                              <Link to={`/admin/orders/${order._id}`}>Details</Link>
+                          <TableCell className="text-right">
+                            <Button variant="secondary" size="sm" asChild>
+                              <Link to={`/admin/orders/${order._id}`}>
+                                View Details
+                              </Link>
                             </Button>
                           </TableCell>
                         </TableRow>
@@ -261,39 +294,40 @@ export default function AdminOrders() {
                 </Table>
               </div>
 
+              {/* Pagination */}
               {totalPages > 1 && (
-                <div className="flex flex-wrap justify-center items-center gap-4 mt-8">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={currentPage <= 1}
-                    onClick={() =>
-                      setSearchParams((p) => {
-                        p.set('page', String(currentPage - 1));
-                        return p;
-                      })
-                    }
-                  >
-                    Previous
-                  </Button>
+                <div className="flex items-center justify-between border-t px-6 py-4 bg-muted/20">
+                  <p className="text-sm text-muted-foreground">
+                    Showing {(currentPage - 1) * ITEMS_PER_PAGE + 1} to{' '}
+                    {Math.min(currentPage * ITEMS_PER_PAGE, pagination?.total || 0)} of{' '}
+                    {pagination?.total} orders
+                  </p>
 
-                  <span className="text-sm text-muted-foreground">
-                    Page {currentPage} of {totalPages}
-                  </span>
+                  <div className="flex items-center gap-3">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={currentPage <= 1}
+                      onClick={() => handlePageChange(currentPage - 1)}
+                    >
+                      <ChevronLeft className="h-4 w-4 mr-1" />
+                      Previous
+                    </Button>
 
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={currentPage >= totalPages}
-                    onClick={() =>
-                      setSearchParams((p) => {
-                        p.set('page', String(currentPage + 1));
-                        return p;
-                      })
-                    }
-                  >
-                    Next
-                  </Button>
+                    <span className="text-sm font-medium">
+                      Page {currentPage} of {totalPages}
+                    </span>
+
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={currentPage >= totalPages}
+                      onClick={() => handlePageChange(currentPage + 1)}
+                    >
+                      Next
+                      <ChevronRight className="h-4 w-4 ml-1" />
+                    </Button>
+                  </div>
                 </div>
               )}
             </>

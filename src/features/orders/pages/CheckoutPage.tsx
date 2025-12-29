@@ -1,10 +1,10 @@
 // src/features/orders/pages/CheckoutPage.tsx
-// FINAL PRODUCTION — DECEMBER 28, 2025
-// Now fully dynamic delivery fee/minOrder/estimatedTime from /api/areas
-// Removed hardcoded 149 fallback everywhere
-// Improved UX + type safety
+// PRODUCTION-READY — DECEMBER 29, 2025
+// Dynamic delivery fee/minOrder/estimatedTime from area
+// Full unit support in item summary
+// Professional, responsive, mobile-first design
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo,useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -31,6 +31,8 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import { Separator } from '@/components/ui/separator';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
+
 import {
   Loader2,
   AlertCircle,
@@ -42,6 +44,7 @@ import {
   Smartphone,
   Package,
 } from 'lucide-react';
+
 import { toast } from 'sonner';
 
 import { useAuthStore } from '@/features/auth/store/authStore';
@@ -49,6 +52,7 @@ import { useCartStore } from '@/features/cart/hooks/useCartStore';
 import { useAddresses } from '@/features/address/hooks/useAddresses';
 import { useAreas } from '@/hooks/useCheckArea';
 import { useCreateOrder, useCreateGuestOrder } from '@/features/orders/hooks/useOrders';
+import { UNIT_LABELS } from '@/types/order.types';
 import type { PublicArea } from '@/types/area';
 
 const baseSchema = z.object({
@@ -101,7 +105,6 @@ export default function CheckoutPage() {
     control,
     handleSubmit,
     watch,
-    setValue,
     formState: { errors },
   } = useForm<CheckoutForm>({
     resolver: zodResolver(schema),
@@ -122,23 +125,24 @@ export default function CheckoutPage() {
   const guestAreaId = watch('guestAddress.areaId');
   const guestFullAddress = watch('guestAddress.fullAddress');
 
-  // Clear cart toast only on initial load
+  // Prevent empty cart
   useEffect(() => {
-    if (items.length === 0 && !createOrder.isPending && !createGuestOrder.isPending) {
+    if (items.length === 0) {
       toast.info('Your cart is empty');
       navigate('/cart', { replace: true });
     }
-  }, [items.length, navigate, createOrder.isPending, createGuestOrder.isPending]);
+  }, [items.length, navigate]);
 
-  // Update delivery info for authenticated users (default / selected address)
+  // Update delivery info for authenticated users
   useEffect(() => {
-    if (!isAuthenticated || addressesLoading || areasLoading || addresses.length === 0) return;
+    if (!isAuthenticated || addressesLoading || areasLoading) return;
 
     const selectedAddr = addresses.find((a) => a._id === selectedAddressId) ||
-                        (addresses.find((a) => a.isDefault) || addresses[0]);
+      addresses.find((a) => a.isDefault) ||
+      addresses[0];
 
     if (selectedAddr?.area?._id) {
-      const area = areas.find((a) => a._id === selectedAddr.area?._id);
+      const area = areas.find((a) => a._id === selectedAddr.area._id);
       updateDeliveryInfo(area);
     }
   }, [selectedAddressId, addresses, areas, isAuthenticated, addressesLoading, areasLoading]);
@@ -151,14 +155,12 @@ export default function CheckoutPage() {
     updateDeliveryInfo(area);
   }, [guestAreaId, areas, isAuthenticated, areasLoading]);
 
-  // Centralized function to update delivery state
   const updateDeliveryInfo = (area?: PublicArea) => {
     if (area?.deliveryZone) {
       setDeliveryFee(area.deliveryZone.deliveryFee ?? 0);
       setMinOrderAmount(area.deliveryZone.minOrderAmount ?? 0);
       setEstimatedTime(area.deliveryZone.estimatedTime || '—');
     } else {
-      // Fallback only when no zone exists (rare after backend fix)
       setDeliveryFee(0);
       setMinOrderAmount(0);
       setEstimatedTime('—');
@@ -166,7 +168,7 @@ export default function CheckoutPage() {
   };
 
   const canProceed =
-    (minOrderAmount === 0 || isMinOrderMet) &&
+    isMinOrderMet &&
     (isAuthenticated ? !!selectedAddressId : !!guestAreaId && !!guestFullAddress?.trim());
 
   const onSubmit = async (data: CheckoutForm) => {
@@ -236,27 +238,23 @@ export default function CheckoutPage() {
         navigate(`/track/${response.order._id}`, { replace: true });
       }
     } catch (error: any) {
-      toast.error(
-        error.response?.data?.message ||
-        error.message ||
-        'Failed to place order. Please try again.'
-      );
+      toast.error(error.response?.data?.message || 'Failed to place order');
     }
   };
 
   return (
-    <main className="min-h-screen bg-background py-6 md:py-8 lg:py-10">
+    <main className="min-h-screen bg-gradient-to-b from-muted/20 to-background py-6 md:py-10">
       <div className="container mx-auto px-4 max-w-6xl">
-        <h1 className="text-3xl font-bold text-center mb-8 md:text-4xl lg:text-5xl">
+        <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold text-center mb-10">
           Checkout
         </h1>
 
         <form onSubmit={handleSubmit(onSubmit)} className="grid gap-8 lg:grid-cols-3">
-          {/* Form Section */}
-          <section className="space-y-6 lg:col-span-2">
-            {/* Guest Contact Info */}
+          {/* Left Column: Form */}
+          <section className="space-y-8 lg:col-span-2">
+            {/* Guest Info */}
             {!isAuthenticated && (
-              <Card>
+              <Card className="shadow-lg">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-3 text-xl md:text-2xl">
                     <User className="h-6 w-6" />
@@ -266,12 +264,12 @@ export default function CheckoutPage() {
                 <CardContent className="grid gap-6 sm:grid-cols-2">
                   <div>
                     <Label htmlFor="name">Full Name *</Label>
-                    <Input id="name" {...register('name')} placeholder="Ahmad Khan" />
+                    <Input id="name" {...register('name')} placeholder="Ahmad Khan" className="h-12" />
                     {errors.name && <p className="mt-1 text-sm text-destructive">{errors.name.message}</p>}
                   </div>
                   <div>
                     <Label htmlFor="phone">Phone Number *</Label>
-                    <Input id="phone" {...register('phone')} placeholder="03451234567" />
+                    <Input id="phone" {...register('phone')} placeholder="03451234567" className="h-12" />
                     {errors.phone && <p className="mt-1 text-sm text-destructive">{errors.phone.message}</p>}
                   </div>
                 </CardContent>
@@ -279,23 +277,23 @@ export default function CheckoutPage() {
             )}
 
             {/* Delivery Address */}
-            <Card>
+            <Card className="shadow-lg">
               <CardHeader>
                 <CardTitle className="flex items-center gap-3 text-xl md:text-2xl">
                   <MapPin className="h-6 w-6" />
                   Delivery Address
                 </CardTitle>
                 {estimatedTime !== '—' && (
-                  <CardDescription className="mt-2 text-base md:text-lg">
-                    Estimated delivery: <span className="font-semibold text-primary">{estimatedTime}</span>
+                  <CardDescription className="text-base md:text-lg mt-2">
+                    Estimated delivery: <strong className="text-primary">{estimatedTime}</strong>
                   </CardDescription>
                 )}
               </CardHeader>
               <CardContent className="space-y-6">
                 {isAuthenticated ? (
                   addressesLoading || areasLoading ? (
-                    <div className="flex items-center justify-center py-12">
-                      <Loader2 className="h-10 w-10 animate-spin text-primary" />
+                    <div className="py-12 text-center">
+                      <Loader2 className="h-10 w-10 animate-spin mx-auto text-primary" />
                     </div>
                   ) : addresses.length > 0 ? (
                     <Controller
@@ -303,15 +301,15 @@ export default function CheckoutPage() {
                       control={control}
                       render={({ field }) => (
                         <Select onValueChange={field.onChange} value={field.value}>
-                          <SelectTrigger className="h-12">
-                            <SelectValue placeholder="Choose a saved address" />
+                          <SelectTrigger className="h-14 text-base">
+                            <SelectValue placeholder="Select a saved address" />
                           </SelectTrigger>
                           <SelectContent>
                             {addresses.map((addr) => (
                               <SelectItem key={addr._id} value={addr._id}>
                                 <div className="space-y-1">
-                                  <div className="font-semibold">{addr.label}</div>
-                                  <div className="text-sm text-muted-foreground">{addr.fullAddress}</div>
+                                  <p className="font-medium">{addr.label}</p>
+                                  <p className="text-sm text-muted-foreground">{addr.fullAddress}</p>
                                 </div>
                               </SelectItem>
                             ))}
@@ -321,22 +319,19 @@ export default function CheckoutPage() {
                     />
                   ) : (
                     <Alert>
-                      <AlertCircle className="h-4 w-4" />
+                      <AlertCircle className="h-5 w-5" />
                       <AlertDescription>
-                        No saved addresses found.{' '}
-                        <Button variant="link" className="p-0 h-auto inline" onClick={() => navigate('/addresses')}>
-                          Add one now
-                        </Button>
+                        No saved addresses. Add one in your profile to continue.
                       </AlertDescription>
                     </Alert>
                   )
                 ) : (
                   <>
                     <div>
-                      <Label>Delivery Area *</Label>
+                      <Label className="text-base md:text-lg">Delivery Area *</Label>
                       {areasLoading ? (
-                        <div className="h-12 flex items-center justify-center">
-                          <Loader2 className="h-5 w-5 animate-spin" />
+                        <div className="h-14 flex items-center justify-center">
+                          <Loader2 className="h-6 w-6 animate-spin" />
                         </div>
                       ) : (
                         <Controller
@@ -344,17 +339,17 @@ export default function CheckoutPage() {
                           control={control}
                           render={({ field }) => (
                             <Select onValueChange={field.onChange} value={field.value}>
-                              <SelectTrigger className="h-12">
+                              <SelectTrigger className="h-14 text-base">
                                 <SelectValue placeholder="Select your area" />
                               </SelectTrigger>
                               <SelectContent>
                                 {areas.map((area) => (
                                   <SelectItem key={area._id} value={area._id}>
                                     <div>
-                                      <div className="font-medium">{area.name}</div>
-                                      <div className="text-sm text-muted-foreground">
+                                      <p className="font-medium">{area.name}</p>
+                                      <p className="text-sm text-muted-foreground">
                                         Delivery: Rs. {area.deliveryZone?.deliveryFee ?? '—'}
-                                      </div>
+                                      </p>
                                     </div>
                                   </SelectItem>
                                 ))}
@@ -368,15 +363,17 @@ export default function CheckoutPage() {
                       )}
                     </div>
 
-                    <div className="space-y-5">
+                    <div className="space-y-6">
                       <div>
-                        <Label htmlFor="guest-fullAddress">Full Address *</Label>
+                        <Label htmlFor="guest-fullAddress" className="text-base md:text-lg">
+                          Full Address *
+                        </Label>
                         <Textarea
                           id="guest-fullAddress"
                           {...register('guestAddress.fullAddress')}
                           placeholder="House #, Street, Sector, Nearby landmark..."
                           rows={4}
-                          className="resize-none"
+                          className="resize-none mt-2"
                         />
                         {errors.guestAddress?.fullAddress && (
                           <p className="mt-1 text-sm text-destructive">{errors.guestAddress.fullAddress.message}</p>
@@ -386,11 +383,11 @@ export default function CheckoutPage() {
                       <div className="grid gap-4 sm:grid-cols-2">
                         <div>
                           <Label>Label (e.g. Home, Work)</Label>
-                          <Input {...register('guestAddress.label')} placeholder="Home" />
+                          <Input {...register('guestAddress.label')} placeholder="Home" className="h-12 mt-2" />
                         </div>
                         <div>
                           <Label>Floor / Apartment</Label>
-                          <Input {...register('guestAddress.floor')} placeholder="2nd Floor, Flat B-3" />
+                          <Input {...register('guestAddress.floor')} placeholder="2nd Floor, Flat B-3" className="h-12 mt-2" />
                         </div>
                       </div>
 
@@ -400,6 +397,7 @@ export default function CheckoutPage() {
                           {...register('guestAddress.instructions')}
                           placeholder="Ring bell twice, leave with guard..."
                           rows={3}
+                          className="mt-2"
                         />
                       </div>
                     </div>
@@ -409,7 +407,7 @@ export default function CheckoutPage() {
             </Card>
 
             {/* Payment Method */}
-            <Card>
+            <Card className="shadow-lg">
               <CardHeader>
                 <CardTitle className="flex items-center gap-3 text-xl md:text-2xl">
                   <CreditCard className="h-6 w-6" />
@@ -432,10 +430,10 @@ export default function CheckoutPage() {
                       ].map((opt) => (
                         <Label
                           key={opt.value}
-                          className="flex items-center gap-4 p-4 md:p-5 border rounded-xl cursor-pointer hover:bg-muted/50 transition mb-3 last:mb-0"
+                          className="flex items-center gap-4 p-5 border rounded-xl cursor-pointer hover:bg-muted/50 transition-colors mb-4 last:mb-0"
                         >
                           <RadioGroupItem value={opt.value} />
-                          <opt.icon className="h-7 w-7 text-primary flex-shrink-0" />
+                          <opt.icon className="h-8 w-8 text-primary" />
                           <span className="font-medium text-base md:text-lg">{opt.label}</span>
                         </Label>
                       ))}
@@ -447,16 +445,20 @@ export default function CheckoutPage() {
 
             {/* Promo & Note */}
             <div className="grid gap-6 md:grid-cols-2">
-              <Card>
+              <Card className="shadow-lg">
                 <CardHeader>
                   <CardTitle className="text-lg md:text-xl">Promo Code</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <Input {...register('promoCode')} placeholder="Enter code (optional)" className="uppercase h-12" />
+                  <Input
+                    {...register('promoCode')}
+                    placeholder="Enter code (optional)"
+                    className="h-12 uppercase"
+                  />
                 </CardContent>
               </Card>
 
-              <Card>
+              <Card className="shadow-lg">
                 <CardHeader>
                   <CardTitle className="text-lg md:text-xl">Order Note</CardTitle>
                   <CardDescription>Any special requests?</CardDescription>
@@ -465,7 +467,8 @@ export default function CheckoutPage() {
                   <Textarea
                     {...register('instructions')}
                     placeholder="Less spicy, extra sauce, no onions..."
-                    rows={4}
+                    rows={5}
+                    className="resize-none"
                   />
                   {errors.instructions && (
                     <p className="mt-1 text-sm text-destructive">{errors.instructions.message}</p>
@@ -475,32 +478,55 @@ export default function CheckoutPage() {
             </div>
           </section>
 
-          {/* Order Summary Sidebar */}
+          {/* Right Column: Summary */}
           <aside className="lg:col-span-1">
-            <Card className="sticky top-6 shadow-xl">
+            <Card className="sticky top-6 shadow-2xl">
               <CardHeader>
                 <CardTitle className="flex items-center gap-3 text-xl md:text-2xl">
-                  <Package className="h-6 w-6 md:h-7 md:w-7" />
+                  <Package className="h-7 w-7" />
                   Order Summary
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-6">
-                <div className="max-h-64 space-y-3 overflow-y-auto pr-2 text-sm md:text-base">
+                {/* Items List */}
+                <div className="space-y-4 max-h-80 overflow-y-auto pr-2">
                   {items.map((item) => (
-                    <div key={item._id} className="flex justify-between">
-                      <span className="text-muted-foreground">
-                        {item.quantity} × {item.menuItem.name}
-                      </span>
-                      <span className="font-medium">
-                        Rs. {(item.priceAtAdd * item.quantity).toLocaleString()}
-                      </span>
+                    <div key={item._id} className="space-y-2">
+                      <div className="flex justify-between items-start">
+                        <div className="flex items-center gap-3">
+                          <span className="font-bold text-lg">{item.quantity}x</span>
+                          <div>
+                            <p className="font-medium">
+                              {item.menuItem.name}
+                              <Badge variant="outline" className="ml-2 text-xs">
+                                {UNIT_LABELS[item.menuItem.unit] || item.menuItem.unit}
+                              </Badge>
+                            </p>
+                          </div>
+                        </div>
+                        <p className="font-medium text-right">
+                          Rs. {(item.priceAtAdd * item.quantity).toLocaleString()}
+                        </p>
+                      </div>
+
+                      {/* Add-ons with units */}
+                      {[...(item.sides || []), ...(item.drinks || []), ...(item.addOns || [])].length > 0 && (
+                        <div className="ml-12 space-y-1 text-sm text-muted-foreground">
+                          {[...(item.sides || []), ...(item.drinks || []), ...(item.addOns || [])].map((addon, i) => (
+                            <p key={i} className="flex justify-between">
+                              <span>• {addon}</span>
+                            </p>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
 
-                <Separator />
+                <Separator className="my-6" />
 
-                <div className="space-y-3 text-base md:text-lg">
+                {/* Totals */}
+                <div className="space-y-4 text-base md:text-lg">
                   <div className="flex justify-between">
                     <span>Subtotal</span>
                     <span>Rs. {subtotal.toLocaleString()}</span>
@@ -511,18 +537,18 @@ export default function CheckoutPage() {
                   </div>
                 </div>
 
-                <Separator />
+                <Separator className="my-6" />
 
-                <div className="flex justify-between text-2xl font-bold md:text-3xl">
+                <div className="flex justify-between text-2xl md:text-3xl font-bold">
                   <span>Total</span>
                   <span className="text-primary">Rs. {total.toLocaleString()}</span>
                 </div>
 
                 {!isMinOrderMet && minOrderAmount > 0 && (
-                  <Alert variant="destructive">
-                    <AlertCircle className="h-4 w-4" />
-                    <AlertDescription className="text-sm md:text-base">
-                      Minimum order for your area: Rs. {minOrderAmount.toLocaleString()}
+                  <Alert variant="destructive" className="mt-6">
+                    <AlertCircle className="h-5 w-5" />
+                    <AlertDescription>
+                      Minimum order amount: Rs. {minOrderAmount.toLocaleString()}
                     </AlertDescription>
                   </Alert>
                 )}
@@ -530,7 +556,7 @@ export default function CheckoutPage() {
                 <Button
                   type="submit"
                   size="lg"
-                  className="w-full h-14 text-base md:text-lg font-semibold shadow-lg"
+                  className="w-full h-16 text-lg md:text-xl font-bold shadow-2xl"
                   disabled={
                     createOrder.isPending ||
                     createGuestOrder.isPending ||

@@ -1,7 +1,4 @@
 // src/features/cart/components/AddToCartModal.tsx
-// PRODUCTION-READY — DECEMBER 2025
-// Mobile-first, scrollable, sticky footer with smooth shadow on scroll
-
 import { useEffect, useMemo, useState, useRef } from 'react';
 import { Plus, Minus, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -20,10 +17,11 @@ import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Badge } from '@/components/ui/badge';
 
 import { useMenuItem } from '@/features/menu/hooks/useMenuApi';
 import { useAddToCart } from '@/features/cart/hooks/useServerCart';
-import { PricedOptions } from '@/features/menu/types/menu.types';
+import { PricedOptions, UNIT_LABELS } from '@/features/menu/types/menu.types';
 import { toast } from 'sonner';
 
 type CustomizationSection = 'sides' | 'drinks' | 'addOns';
@@ -63,7 +61,6 @@ export const AddToCartModal = ({
 
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Reset state when modal opens
   useEffect(() => {
     if (open) {
       setQuantity(1);
@@ -73,7 +70,6 @@ export const AddToCartModal = ({
     }
   }, [open]);
 
-  // Handle scroll shadow for footer
   useEffect(() => {
     const handleScroll = () => {
       if (!scrollRef.current) return;
@@ -82,9 +78,8 @@ export const AddToCartModal = ({
     const current = scrollRef.current;
     current?.addEventListener('scroll', handleScroll);
     return () => current?.removeEventListener('scroll', handleScroll);
-  }, [scrollRef]);
+  }, []);
 
-  // Compute extras total
   const extrasTotal = useMemo(() => {
     if (!menuItem?.pricedOptions) return 0;
     let total = 0;
@@ -180,7 +175,12 @@ export const AddToCartModal = ({
         {/* Header */}
         <SheetHeader className="border-b pb-4">
           <div className="flex items-center justify-between">
-            <SheetTitle className="text-xl font-bold">{menuItem.name}</SheetTitle>
+            <SheetTitle className="text-xl font-bold flex items-center gap-3">
+              {menuItem.name}
+              <Badge variant="secondary" className="text-xs">
+                {UNIT_LABELS[menuItem.unit] || menuItem.unit}
+              </Badge>
+            </SheetTitle>
             <SheetClose asChild>
               <Button variant="ghost" size="icon">
                 <X className="h-5 w-5" />
@@ -190,10 +190,7 @@ export const AddToCartModal = ({
         </SheetHeader>
 
         {/* Scrollable content */}
-        <div
-          ref={scrollRef}
-          className="flex-1 overflow-y-auto px-6 py-6 space-y-8 pb-24"
-        >
+        <div ref={scrollRef} className="flex-1 overflow-y-auto px-6 py-6 space-y-8 pb-24">
           {/* Quantity */}
           <div className="bg-card rounded-xl p-4 border">
             <Label className="text-base font-semibold">Quantity</Label>
@@ -233,10 +230,17 @@ export const AddToCartModal = ({
                         checked={selectedOptions[section].includes(opt.name)}
                         onCheckedChange={() => toggleOption(section, opt.name)}
                       />
-                      <span>{opt.name}</span>
+                      <div className="flex items-center gap-2">
+                        <span>{opt.name}</span>
+                        {opt.unit && (
+                          <Badge variant="outline" className="text-xs py-0 px-1.5">
+                            {UNIT_LABELS[opt.unit] || opt.unit}
+                          </Badge>
+                        )}
+                      </div>
                     </div>
                     {opt.price > 0 && (
-                      <span className="text-sm font-medium">+Rs. {opt.price}</span>
+                      <span className="text-sm font-medium text-primary">+Rs. {opt.price}</span>
                     )}
                   </div>
                 ))}
@@ -277,7 +281,7 @@ export const AddToCartModal = ({
         {/* Footer */}
         <div
           className={`bg-background border-t p-6 space-y-4 z-10 transition-shadow duration-300 ${
-            showFooterShadow ? 'shadow-t-lg' : ''
+            showFooterShadow ? 'shadow-2xl' : 'shadow-lg'
           }`}
         >
           <div className="flex justify-between items-center">
@@ -286,8 +290,8 @@ export const AddToCartModal = ({
               Rs. {itemTotal.toFixed(2)}
             </span>
           </div>
-          <Button size="lg" onClick={handleAddToCart} disabled={addToCart.isPending}>
-            {addToCart.isPending ? 'Adding…' : 'Add to Cart'}
+          <Button size="lg" onClick={handleAddToCart} disabled={addToCart.isPending} className="w-full">
+            {addToCart.isPending ? 'Adding to cart...' : 'Add to Cart'}
           </Button>
         </div>
       </SheetContent>

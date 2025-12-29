@@ -9,7 +9,7 @@ export function MenuItemSkeleton() {
       {/* Image Placeholder */}
       <div className="relative">
         <Skeleton className="aspect-[4/3] w-full rounded-t-xl" />
-        {/* Fake "Add" button overlay */}
+   
         <div className="absolute bottom-3 right-3">
           <Skeleton className="h-10 w-10 rounded-full" />
         </div>

@@ -5,7 +5,6 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Upload, Loader2, Trash2, Globe } from "lucide-react";
 import { toast } from "sonner";
-import { Label } from "@/components/ui/label";
 
 import {
   Dialog,
@@ -28,6 +27,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label"; // ← FIXED: Import added
 import {
   Select,
   SelectContent,
@@ -41,12 +41,20 @@ import {
   useUpdateMenuItem,
   useAvailableAreas,
 } from "../hooks/useMenuApi";
-import { CATEGORY_OPTIONS, type MenuCategory, type MenuItem } from "../types/menu.types";
+import {
+  CATEGORY_OPTIONS,
+  type MenuCategory,
+  type MenuItem,
+  ALLOWED_UNITS,
+  UNIT_LABELS,
+} from "../types/menu.types";
 
+// Schema with strict unit enum
 const formSchema = z.object({
   name: z.string().min(2).max(100),
   description: z.string().max(500).optional(),
   price: z.coerce.number().min(1),
+  unit: z.enum(ALLOWED_UNITS), // ← Strict type
   category: z.enum(["breakfast", "lunch", "dinner", "desserts", "beverages"]),
   isVeg: z.boolean(),
   isSpicy: z.boolean(),
@@ -86,6 +94,7 @@ export function MenuItemFormModal({
       name: "",
       description: "",
       price: 199,
+      unit: "pc",
       category: "dinner",
       isVeg: false,
       isSpicy: false,
@@ -109,6 +118,7 @@ export function MenuItemFormModal({
         name: editItem.name,
         description: editItem.description || "",
         price: editItem.price,
+        unit: (editItem.unit as any) || "pc", // Safe fallback
         category: editItem.category,
         isVeg: editItem.isVeg,
         isSpicy: editItem.isSpicy,
@@ -121,6 +131,7 @@ export function MenuItemFormModal({
         name: "",
         description: "",
         price: 199,
+        unit: "pc",
         category: "dinner",
         isVeg: false,
         isSpicy: false,
@@ -170,6 +181,7 @@ export function MenuItemFormModal({
             name: values.name.trim(),
             description: values.description?.trim(),
             price: values.price,
+            unit: values.unit, // ← Now valid
             category: values.category,
             isVeg: values.isVeg,
             isSpicy: values.isSpicy,
@@ -183,6 +195,7 @@ export function MenuItemFormModal({
           name: values.name.trim(),
           description: values.description?.trim(),
           price: values.price,
+          unit: values.unit, // ← Now valid
           category: values.category,
           isVeg: values.isVeg,
           isSpicy: values.isSpicy,
@@ -195,7 +208,7 @@ export function MenuItemFormModal({
       onOpenChange(false);
       onSuccess?.();
     } catch {
-      // Error already handled in hook
+      // Errors handled in hooks
     }
   };
 
@@ -209,7 +222,6 @@ export function MenuItemFormModal({
         </DialogHeader>
 
         <ScrollArea className="max-h-[calc(90vh-96px)]">
-          {/* Subtract header + footer height from max height */}
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="p-6 pt-0">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
@@ -264,85 +276,138 @@ export function MenuItemFormModal({
                 {/* Details */}
                 <div className="md:col-span-2 space-y-6">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                    <FormField control={form.control} name="name" render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Name *</FormLabel>
-                        <FormControl>
-                          <Input placeholder="Chicken Biryani" {...field} disabled={isSubmitting} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )} />
+                    <FormField
+                      control={form.control}
+                      name="name"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Name *</FormLabel>
+                          <FormControl>
+                            <Input placeholder="Chicken Biryani" {...field} disabled={isSubmitting} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
 
-                    <FormField control={form.control} name="price" render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Price (Rs.) *</FormLabel>
-                        <FormControl>
-                          <Input type="number" min="1" placeholder="299" {...field} disabled={isSubmitting} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )} />
+                    <FormField
+                      control={form.control}
+                      name="price"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Price (Rs.) *</FormLabel>
+                          <FormControl>
+                            <Input type="number" min="1" placeholder="299" {...field} disabled={isSubmitting} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
                   </div>
 
-                  <FormField control={form.control} name="description" render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Description</FormLabel>
-                      <FormControl>
-                        <Textarea
-                          rows={3}
-                          placeholder="Aromatic basmati rice with tender chicken..."
-                          {...field}
-                          value={field.value ?? ""}
-                          disabled={isSubmitting}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )} />
+                  {/* Unit Selector */}
+                  <FormField
+                    control={form.control}
+                    name="unit"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Unit *</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value} disabled={isSubmitting}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select unit" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {ALLOWED_UNITS.map((unit) => (
+                              <SelectItem key={unit} value={unit}>
+                                {UNIT_LABELS[unit]}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormDescription>
+                          How this item is sold (e.g., per piece, per kg, 500ml)
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
 
-                  <FormField control={form.control} name="category" render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Category *</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value} disabled={isSubmitting}>
+                  <FormField
+                    control={form.control}
+                    name="description"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Description</FormLabel>
                         <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select category" />
-                          </SelectTrigger>
+                          <Textarea
+                            rows={3}
+                            placeholder="Aromatic basmati rice with tender chicken..."
+                            {...field}
+                            value={field.value ?? ""}
+                            disabled={isSubmitting}
+                          />
                         </FormControl>
-                        <SelectContent>
-                          {CATEGORY_OPTIONS.map((opt) => (
-                            <SelectItem key={opt.value} value={opt.value}>
-                              <div className="flex items-center gap-3">
-                                {opt.icon}
-                                <span>{opt.label}</span>
-                              </div>
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )} />
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="category"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Category *</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value} disabled={isSubmitting}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select category" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {CATEGORY_OPTIONS.map((opt) => (
+                              <SelectItem key={opt.value} value={opt.value}>
+                                <div className="flex items-center gap-3">
+                                  {opt.icon}
+                                  <span>{opt.label}</span>
+                                </div>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
 
                   <div className="flex gap-10">
-                    <FormField control={form.control} name="isVeg" render={({ field }) => (
-                      <FormItem className="flex items-center space-x-3 space-y-0">
-                        <FormControl>
-                          <Checkbox checked={field.value} onCheckedChange={field.onChange} disabled={isSubmitting} />
-                        </FormControl>
-                        <FormLabel className="font-normal cursor-pointer">Vegetarian</FormLabel>
-                      </FormItem>
-                    )} />
+                    <FormField
+                      control={form.control}
+                      name="isVeg"
+                      render={({ field }) => (
+                        <FormItem className="flex items-center space-x-3 space-y-0">
+                          <FormControl>
+                            <Checkbox checked={field.value} onCheckedChange={field.onChange} disabled={isSubmitting} />
+                          </FormControl>
+                          <FormLabel className="font-normal cursor-pointer">Vegetarian</FormLabel>
+                        </FormItem>
+                      )}
+                    />
 
-                    <FormField control={form.control} name="isSpicy" render={({ field }) => (
-                      <FormItem className="flex items-center space-x-3 space-y-0">
-                        <FormControl>
-                          <Checkbox checked={field.value} onCheckedChange={field.onChange} disabled={isSubmitting} />
-                        </FormControl>
-                        <FormLabel className="font-normal cursor-pointer">Spicy</FormLabel>
-                      </FormItem>
-                    )} />
+                    <FormField
+                      control={form.control}
+                      name="isSpicy"
+                      render={({ field }) => (
+                        <FormItem className="flex items-center space-x-3 space-y-0">
+                          <FormControl>
+                            <Checkbox checked={field.value} onCheckedChange={field.onChange} disabled={isSubmitting} />
+                          </FormControl>
+                          <FormLabel className="font-normal cursor-pointer">Spicy</FormLabel>
+                        </FormItem>
+                      )}
+                    />
                   </div>
                 </div>
               </div>

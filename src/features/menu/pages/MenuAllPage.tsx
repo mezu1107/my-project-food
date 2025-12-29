@@ -1,8 +1,4 @@
 // src/features/menu/pages/MenuAllPage.tsx
-// PRODUCTION-READY — FULLY RESPONSIVE (320px → 4K)
-// Mobile-first, fluid layout, touch-friendly tabs, smooth animations
-// Optimized for performance and accessibility
-
 import { useState, useMemo } from "react";
 import { useFullMenuCatalog } from "../hooks/useMenuApi";
 import { MenuItemCard } from "../components/MenuItemCard";
@@ -65,7 +61,7 @@ export const MenuAllPage = () => {
         </div>
       </section>
 
-      {/* Sticky Category Filter Tabs */}
+      {/* Sticky Category Tabs */}
       <div className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 shadow-md">
         <div className="container mx-auto px-4 py-4">
           <div className="flex flex-wrap justify-center gap-3 sm:gap-4">
@@ -104,7 +100,7 @@ export const MenuAllPage = () => {
         </div>
       </div>
 
-      {/* Menu Content */}
+      {/* Menu Grid */}
       <section className="container mx-auto px-4 py-8 md:py-12 lg:py-16">
         {isLoading ? (
           <MenuPageSkeleton />

@@ -5,7 +5,35 @@
 import type { Address } from '@/features/address/types/address.types';
 import type { Review } from '@/features/reviews/types/review.types';
 import { CartItem, MenuItemInCart } from '@/types/cart.types';
+export const ALLOWED_UNITS = [
+  'pc',
+  'bottle',
+  'kg',
+  'g',
+  'slice',
+  'cup',
+  'ml',
+  'liter',
+  'pack',
+  'dozen',
+  'tray',
+] as const;
 
+export type Unit = typeof ALLOWED_UNITS[number];
+
+export const UNIT_LABELS: Record<Unit, string> = {
+  pc: 'per piece',
+  bottle: 'per bottle',
+  kg: 'per kg',
+  g: 'g',
+  slice: 'per slice',
+  cup: 'per cup',
+  ml: 'ml',
+  liter: 'liter',
+  pack: 'per pack',
+  dozen: 'per dozen',
+  tray: 'per tray',
+};
 export type PaymentMethod =
   | 'cash'
   | 'card'
@@ -41,11 +69,24 @@ export interface OrderItem {
   };
   name: string;
   image?: string;
+  unit: Unit; // ← Now strongly typed
   priceAtOrder: number;
   quantity: number;
-  sides?: string[];
-  drinks?: string[];
-  addOns?: string[];
+  sides?: Array<{
+    name: string;
+    price: number;
+    unit: Unit;
+  }>;
+  drinks?: Array<{
+    name: string;
+    price: number;
+    unit: Unit;
+  }>;
+  addOns?: Array<{
+    name: string;
+    price: number;
+    unit: Unit;
+  }>;
   specialInstructions?: string;
 }
 
@@ -83,57 +124,42 @@ export interface OrderTotals {
 // Public tracking endpoint response wrapper
 export interface TrackOrderResponse {
   success: true;
-  order: Order;
+  order: Order; // ← correct nested order
 }
+
 export interface Order {
   _id: string;
   shortId?: string;
-
   items: OrderItem[];
-
   customer?: {
     _id: string;
     name: string;
     phone: string;
   };
-
   guestInfo?: GuestInfo;
-
   address?: Address;
   addressDetails: AddressDetails;
-
   area?: {
     _id: string;
     name: string;
   };
-
   deliveryZone?: string;
-
-  // These are included in authenticated responses
   totalAmount?: number;
   deliveryFee?: number;
   discountApplied?: number;
   walletUsed?: number;
   finalAmount?: number;
-
-  // Public tracking includes this nested object
-  totals?: OrderTotals;
-
+  totals?: OrderTotals; // ← Used in public tracking
   paymentMethod: PaymentMethod;
   paymentStatus: PaymentStatus;
   status: OrderStatus;
-
   bankTransferReference?: string;
   paymentIntentId?: string;
-
   instructions?: string;
-
   placedAt: string;
   updatedAt?: string;
   estimatedDelivery: string;
-
   appliedDeal?: AppliedDeal | null;
-
   rider?:
     | {
         _id: string;
@@ -141,12 +167,12 @@ export interface Order {
         phone: string;
       }
     | null;
-
   confirmedAt?: string;
   preparingAt?: string;
   outForDeliveryAt?: string;
   deliveredAt?: string;
-
+  cancelledAt?: string;
+  cancelledBy?: string;
   review?: Review | null;
 }
 
@@ -155,7 +181,7 @@ export interface Order {
 export interface CreateOrderItemPayload {
   menuItem: string;
   quantity: number;
-  priceAtAdd: number; // ← REQUIRED: includes extras pricing
+  priceAtAdd: number;
   sides?: string[];
   drinks?: string[];
   addOns?: string[];
@@ -164,7 +190,7 @@ export interface CreateOrderItemPayload {
 
 export interface CreateOrderPayload {
   items: CreateOrderItemPayload[];
-  addressId?: string; // Only for authenticated users
+  addressId?: string;
   paymentMethod?: PaymentMethod;
   promoCode?: string;
   useWallet?: boolean;
@@ -215,17 +241,17 @@ export interface OrderResponse {
   order: Order;
 }
 
+
 export interface ReorderResponse {
   success: true;
   message: string;
   cart: {
     items: CartItem[];
-    isGuest?: boolean;
-    total?: number;
-    orderNote?: string;
+    isGuest: boolean;
   };
   skippedItems?: number;
 }
+
 // ====================== CONSTANTS & HELPERS ======================
 
 export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
@@ -258,7 +284,8 @@ export const PAYMENT_STATUS_LABELS: Record<PaymentStatus, string> = {
   refunded: 'Refunded',
   refund_pending: 'Refund Pending',
 };
-
+// Add this near the top, after your imports
+export type AnyOrderResponse = OrderResponse | TrackOrderResponse;
 export const getOrderStatusLabel = (status: OrderStatus): string =>
   ORDER_STATUS_LABELS[status] || status;
 

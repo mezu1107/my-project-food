@@ -1,8 +1,7 @@
 // src/features/cart/pages/CartPage.tsx
-// PRODUCTION-READY — DECEMBER 28, 2025
-// Refactored for 100% responsive design (mobile-first, fluid, no horizontal scroll)
-// Uses Tailwind CSS responsive utilities + clamp() for typography
-// Fully typed, accessible, touch-friendly, semantic HTML
+// PRODUCTION-READY — DECEMBER 29, 2025
+// Fully responsive, mobile-first, with professional unit display
+// Shows main item unit + per-option units (e.g., "500ml", "per kg")
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -33,6 +32,7 @@ import {
   useClearCart,
 } from '@/features/cart/hooks/useServerCart';
 import type { CartItem } from '@/types/cart.types';
+import { UNIT_LABELS } from '@/features/menu/types/menu.types';
 
 export default function CartPage() {
   const navigate = useNavigate();
@@ -70,7 +70,6 @@ export default function CartPage() {
 
   const isMutating = updateMutation.isPending || removeMutation.isPending || clearMutation.isPending;
 
-  // Order note local input (debounced for guests, onBlur for auth users)
   const [orderNoteInput, setOrderNoteInput] = useState<string>(currentOrderNote);
   const [isEditingNote, setIsEditingNote] = useState<boolean>(false);
 
@@ -78,7 +77,6 @@ export default function CartPage() {
     setOrderNoteInput(currentOrderNote);
   }, [currentOrderNote]);
 
-  // Debounced save for guest users
   useEffect(() => {
     if (isGuest && orderNoteInput !== currentOrderNote) {
       const timeout = setTimeout(() => {
@@ -88,7 +86,6 @@ export default function CartPage() {
     }
   }, [orderNoteInput, isGuest, currentOrderNote, localCart]);
 
-  // Save order note for authenticated users
   const saveOrderNote = () => {
     if (!isGuest && orderNoteInput.trim().slice(0, 500) !== currentOrderNote) {
       updateMutation.mutate({
@@ -127,7 +124,6 @@ export default function CartPage() {
     }
   };
 
-  // Loading state (authenticated only)
   if (serverLoading && !isGuest) {
     return (
       <main className="container mx-auto px-4 py-16 text-center">
@@ -137,7 +133,6 @@ export default function CartPage() {
     );
   }
 
-  // Empty cart
   if (items.length === 0) {
     return (
       <main className="container mx-auto px-4 py-16 md:py-24 text-center">
@@ -162,7 +157,6 @@ export default function CartPage() {
 
   return (
     <main className="container mx-auto px-4 py-6 md:py-8 lg:py-10">
-      {/* Page Header */}
       <header className="mb-6 flex items-center gap-3 md:mb-8">
         <Button variant="ghost" size="icon" onClick={() => navigate(-1)} aria-label="Go back">
           <ArrowLeft className="h-5 w-5" />
@@ -173,11 +167,8 @@ export default function CartPage() {
         </Badge>
       </header>
 
-      {/* Main Grid: Mobile = stacked, Tablet+ = sidebar summary */}
       <div className="grid gap-8 lg:grid-cols-3">
-        {/* Cart Items & Order Note Section */}
         <section className="space-y-6 lg:col-span-2">
-          {/* Items Card */}
           <div className="rounded-2xl border bg-card p-4 md:p-6">
             <div className="mb-5 flex items-center justify-between md:mb-6">
               <h2 className="flex items-center gap-3 text-xl font-bold md:text-2xl">
@@ -194,7 +185,6 @@ export default function CartPage() {
               </Button>
             </div>
 
-            {/* Scrollable items list – height adapts on larger screens */}
             <ScrollArea className="h-[50vh] md:h-[60vh] lg:h-[65vh] pr-3">
               <div className="space-y-5">
                 {items.map((item) => (
@@ -202,7 +192,6 @@ export default function CartPage() {
                     key={item._id}
                     className="flex flex-col gap-4 rounded-xl border bg-background p-4 shadow-sm transition-shadow hover:shadow-md sm:flex-row"
                   >
-                    {/* Image – fluid & responsive */}
                     {item.menuItem.image ? (
                       <img
                         src={item.menuItem.image}
@@ -216,27 +205,62 @@ export default function CartPage() {
                       </div>
                     )}
 
-                    {/* Details */}
                     <div className="flex flex-1 flex-col justify-between">
                       <div>
-                        <h3 className="text-lg font-semibold md:text-xl">{item.menuItem.name}</h3>
+                        {/* Item name + unit */}
+                        <h3 className="text-lg font-semibold md:text-xl flex flex-wrap items-center gap-2">
+                          {item.menuItem.name}
+                          <Badge variant="outline" className="text-xs py-0 px-2">
+                            {UNIT_LABELS[item.menuItem.unit] || item.menuItem.unit}
+                          </Badge>
+                        </h3>
 
-                        {/* Customizations */}
-                        {(item.sides?.length || item.drinks?.length || item.addOns?.length || item.specialInstructions) && (
+                        {/* Enriched selectedOptions (new format) */}
+                        {item.selectedOptions && (
+                          <div className="mt-3 space-y-1 rounded-lg bg-muted/50 p-3 text-sm text-muted-foreground">
+                            {(['sides', 'drinks', 'addOns'] as const).map((section) =>
+                              item.selectedOptions?.[section]?.map((opt) => (
+                                <p key={opt.name} className="flex items-center justify-between">
+                                  <span className="flex items-center gap-2">
+                                    • {opt.name}
+                                    {opt.unit && (
+                                      <Badge variant="outline" className="text-xs py-0 px-1.5">
+                                        {UNIT_LABELS[opt.unit] || opt.unit}
+                                      </Badge>
+                                    )}
+                                  </span>
+                                  {opt.price > 0 && (
+                                    <span className="text-primary font-medium">
+                                      +Rs. {opt.price}
+                                    </span>
+                                  )}
+                                </p>
+                              ))
+                            )}
+                          </div>
+                        )}
+
+                        {/* Fallback: old string array format */}
+                        {!item.selectedOptions && (item.sides?.length || item.drinks?.length || item.addOns?.length) && (
                           <div className="mt-3 space-y-1 rounded-lg bg-muted/50 p-3 text-sm text-muted-foreground">
                             {item.sides?.length > 0 && <p>• Sides: {item.sides.join(', ')}</p>}
                             {item.drinks?.length > 0 && <p>• Drinks: {item.drinks.join(', ')}</p>}
                             {item.addOns?.length > 0 && <p>• Add-ons: {item.addOns.join(', ')}</p>}
-                            {item.specialInstructions && <p>• Note: {item.specialInstructions}</p>}
                           </div>
                         )}
 
-                        <p className="mt-2 text-sm text-muted-foreground">
+                        {/* Special instructions */}
+                        {item.specialInstructions && (
+                          <p className="mt-2 text-sm italic text-muted-foreground">
+                            Note: {item.specialInstructions}
+                          </p>
+                        )}
+
+                        <p className="mt-3 text-sm text-muted-foreground">
                           Rs. {item.priceAtAdd.toFixed(2)} each
                         </p>
                       </div>
 
-                      {/* Quantity controls & remove */}
                       <div className="mt-4 flex items-center justify-between sm:mt-6">
                         <div className="flex items-center gap-3">
                           <Button
@@ -273,7 +297,6 @@ export default function CartPage() {
                       </div>
                     </div>
 
-                    {/* Item total */}
                     <div className="text-right sm:ml-auto sm:self-center">
                       <p className="text-xl font-bold md:text-2xl">
                         Rs. {(item.priceAtAdd * item.quantity).toFixed(2)}
@@ -285,7 +308,7 @@ export default function CartPage() {
             </ScrollArea>
           </div>
 
-          {/* Order Note Card */}
+          {/* Order Note */}
           <div className="rounded-2xl border bg-card p-4 md:p-6">
             <div className="mb-4 flex items-center gap-3">
               <MessageSquare className="h-5 w-5 text-primary md:h-6 md:w-6" />
@@ -322,7 +345,7 @@ export default function CartPage() {
           </div>
         </section>
 
-        {/* Order Summary Sidebar – sticky on large screens */}
+        {/* Summary Sidebar */}
         <aside className="lg:col-span-1">
           <div className="rounded-2xl border bg-card p-5 md:p-6 lg:sticky lg:top-6">
             <h2 className="mb-6 text-xl font-bold md:text-2xl">Order Summary</h2>

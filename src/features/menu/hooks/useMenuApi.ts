@@ -21,7 +21,6 @@ import type {
 
 // src/features/menu/hooks/useMenuApi.ts
 
-// ... imports remain the same
 
 export function useMenuByArea(areaId: string | undefined) {
   return useQuery({

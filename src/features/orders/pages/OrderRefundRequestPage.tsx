@@ -1,8 +1,8 @@
 // src/features/orders/pages/OrderRefundRequestPage.tsx
-// PRODUCTION-READY — FULLY RESPONSIVE (320px → 4K)
-// Mobile-first, fluid layout, touch-friendly, accessible
-// Enhanced visual hierarchy, clear feedback, smooth UX
-
+// PRODUCTION-READY — DECEMBER 29, 2025
+// Mobile-first, accessible, beautiful refund flow
+// Full validation, eligibility checks, clear feedback
+import { AnyOrderResponse } from '@/types/order.types'; // ← Add this import
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
@@ -21,14 +21,19 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ArrowLeft, Receipt, Shield, AlertCircle } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
+
+import { ArrowLeft, Receipt, Shield, AlertCircle, CreditCard, Package } from 'lucide-react';
 
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 
 import { useOrder, useTrackOrder } from '@/features/orders/hooks/useOrders';
 import { useAuthStore } from '@/features/auth/store/authStore';
-import { api } from '@/lib/api';
+import { useRequestRefund } from '@/features/orders/hooks/useOrders';
+
+import { ORDER_STATUS_LABELS, ORDER_STATUS_COLORS } from '@/types/order.types';
 
 /* ------------------------------------------------------------------ */
 /* ZOD SCHEMA                                                         */
@@ -44,7 +49,7 @@ const refundSchema = z.object({
 
   reason: z
     .string()
-    .min(10, 'Please provide a detailed reason (at least 10 characters)')
+    .min(15, 'Please provide a detailed reason (at least 15 characters)')
     .max(500, 'Reason cannot exceed 500 characters'),
 });
 
@@ -55,14 +60,15 @@ export default function OrderRefundRequestPage() {
   const navigate = useNavigate();
   const { isAuthenticated } = useAuthStore();
 
-  const privateQuery = useOrder(orderId);
-  const publicQuery = useTrackOrder(orderId);
+const privateQuery = useOrder(orderId);
+const publicQuery = useTrackOrder(orderId);
 
-  const order = isAuthenticated ? privateQuery.data : publicQuery.data;
-  const isLoading = isAuthenticated ? privateQuery.isLoading : publicQuery.isLoading;
-  const isError = isAuthenticated ? privateQuery.isError : publicQuery.isError;
+const query = isAuthenticated ? privateQuery : publicQuery;
+const { data: response, isLoading, isError } = query;
+const order = (response as AnyOrderResponse)?.order;
+ 
 
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const requestRefundMutation = useRequestRefund();
 
   const {
     register,
@@ -70,6 +76,7 @@ export default function OrderRefundRequestPage() {
     formState: { errors },
     watch,
     setValue,
+    reset,
   } = useForm<RefundForm>({
     resolver: zodResolver(refundSchema),
     defaultValues: {
@@ -78,13 +85,13 @@ export default function OrderRefundRequestPage() {
     },
   });
 
-  const requestedAmount = watch('amount') || 0;
+  const requestedAmount = watch('amount');
 
   /* ------------------------------------------------------------------ */
   /* Auto-fill maximum refundable amount                                 */
   /* ------------------------------------------------------------------ */
   useEffect(() => {
-    if (order?.finalAmount > 0) {
+    if (order?.finalAmount) {
       setValue('amount', order.finalAmount);
     }
   }, [order?.finalAmount, setValue]);
@@ -97,6 +104,7 @@ export default function OrderRefundRequestPage() {
       style: 'currency',
       currency: 'PKR',
       minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
     }).format(amount);
   };
 
@@ -104,34 +112,29 @@ export default function OrderRefundRequestPage() {
   /* Submit Refund Request                                              */
   /* ------------------------------------------------------------------ */
   const onSubmit = async (data: RefundForm) => {
-    if (!order) return;
+    if (!order || !orderId) return;
 
     if (data.amount > order.finalAmount) {
       toast.error('Requested amount cannot exceed total paid');
       return;
     }
 
-    try {
-      setIsSubmitting(true);
-
-      await api.post(`/orders/${order._id}/request-refund`, {
+    requestRefundMutation.mutate(
+      {
+        orderId,
         amount: data.amount,
         reason: data.reason.trim(),
-      });
-
-      toast.success(
-        'Refund request submitted! We’ll review it and get back to you within 24 hours.'
-      );
-
-      navigate(`/track/${order._id}`);
-    } catch (error: any) {
-      const message =
-        error.response?.data?.message ||
-        'Failed to submit refund request. Please try again later.';
-      toast.error(message);
-    } finally {
-      setIsSubmitting(false);
-    }
+      },
+      {
+        onSuccess: () => {
+          toast.success(
+            'Refund request submitted successfully! We’ll review it within 24 hours.'
+          );
+          reset();
+          navigate(`/track/${orderId}`);
+        },
+      }
+    );
   };
 
   /* ------------------------------------------------------------------ */
@@ -141,7 +144,7 @@ export default function OrderRefundRequestPage() {
     return (
       <main className="container mx-auto px-4 py-8 md:py-12 max-w-4xl">
         <div className="space-y-8">
-          <Skeleton className="h-10 w-64 mx-auto" />
+          <Skeleton className="h-12 w-72" />
           <Skeleton className="h-96 rounded-2xl" />
           <Skeleton className="h-80 rounded-2xl" />
         </div>
@@ -155,11 +158,11 @@ export default function OrderRefundRequestPage() {
   if (isError || !order) {
     return (
       <main className="min-h-screen flex items-center justify-center px-4 py-12 bg-muted/20">
-        <Card className="w-full max-w-md text-center p-8 md:p-10">
-          <AlertCircle className="h-14 w-14 md:h-16 md:w-16 text-destructive mx-auto mb-6" />
-          <h2 className="text-2xl font-bold md:text-3xl mb-4">Order Not Found</h2>
-          <p className="text-base text-muted-foreground mb-8 md:text-lg">
-            This order doesn't exist or has been removed.
+        <Card className="w-full max-w-md text-center p-8 md:p-10 shadow-xl">
+          <AlertCircle className="h-16 w-16 text-destructive mx-auto mb-6" />
+          <h2 className="text-3xl font-bold mb-4">Order Not Found</h2>
+          <p className="text-base text-muted-foreground mb-8">
+            The order you're looking for doesn't exist or has been removed.
           </p>
           <Button size="lg" asChild>
             <Link to="/orders">Go to My Orders</Link>
@@ -181,20 +184,33 @@ export default function OrderRefundRequestPage() {
     return (
       <main className="min-h-screen flex items-center justify-center px-4 py-12 bg-muted/20">
         <Card className="w-full max-w-lg p-8 md:p-10 text-center shadow-xl">
-          <Shield className="h-14 w-14 md:h-16 md:w-16 text-muted-foreground mx-auto mb-6" />
-          <h2 className="text-2xl font-bold md:text-3xl mb-4">Refund Not Available</h2>
-          <p className="text-base text-muted-foreground mb-8 leading-relaxed md:text-lg">
-            Refunds are only available for orders that are:
-            <br />
-            <strong>• Paid by card</strong> and <strong>• Marked as delivered</strong>
-          </p>
-          <Button size="lg" asChild>
-            <Link to={`/track/${order._id}`}>Back to Order Details</Link>
+          <Shield className="h-16 w-16 text-muted-foreground mx-auto mb-6" />
+          <h2 className="text-3xl font-bold mb-4">Refund Not Available</h2>
+          <div className="text-left text-base text-muted-foreground space-y-3 mb-8">
+            <p>Refunds are only available if:</p>
+            <ul className="list-disc list-inside space-y-2 pl-4">
+              <li>Order is marked as <strong>Delivered</strong></li>
+              <li>Paid via <strong>Credit/Debit Card</strong></li>
+              <li>Payment status is <strong>Paid</strong></li>
+            </ul>
+          </div>
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Current status: <Badge className={ORDER_STATUS_COLORS[order.status]}>{ORDER_STATUS_LABELS[order.status]}</Badge>
+            </p>
+            <p className="text-sm text-muted-foreground">
+              Payment method: <strong>{order.paymentMethod.toUpperCase()}</strong>
+            </p>
+          </div>
+          <Button size="lg" asChild className="mt-8">
+            <Link to={`/track/${order._id}`}>Back to Order</Link>
           </Button>
         </Card>
       </main>
     );
   }
+
+  const shortId = order.shortId || `#${order._id.slice(-6).toUpperCase()}`;
 
   /* ------------------------------------------------------------------ */
   /* Main Refund Request Form                                           */
@@ -202,38 +218,76 @@ export default function OrderRefundRequestPage() {
   return (
     <main className="min-h-screen bg-gradient-to-b from-muted/20 to-background py-8 md:py-12">
       <div className="container mx-auto px-4 max-w-4xl">
-        <Button variant="ghost" asChild className="mb-8">
+        {/* Back Button */}
+        <Button variant="ghost" asChild className="mb-8 text-base">
           <Link to={`/track/${order._id}`}>
             <ArrowLeft className="h-5 w-5 mr-2" />
             Back to Order
           </Link>
         </Button>
 
-        <header className="text-center mb-10 md:mb-12">
-          <Receipt className="h-14 w-14 md:h-16 md:w-16 mx-auto text-amber-600 mb-4" />
-          <h1 className="text-3xl font-bold mb-3 md:text-4xl lg:text-5xl">Request a Refund</h1>
-          <p className="text-base text-muted-foreground md:text-lg">
-            Order #{order.shortId || order._id.slice(-6).toUpperCase()} •{' '}
+        {/* Header */}
+        <header className="text-center mb-10 md:mb-14">
+          <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-amber-100 mb-6 shadow-lg">
+            <Receipt className="h-10 w-10 text-amber-600" />
+          </div>
+          <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-3">
+            Request a Refund
+          </h1>
+          <p className="text-lg text-muted-foreground">
+            Order <span className="font-bold text-primary">{shortId}</span> •{' '}
             {format(new Date(order.placedAt), 'dd MMM yyyy')}
           </p>
+          <Badge className="mt-4 text-base px-5 py-2 bg-green-500 text-white">
+            {ORDER_STATUS_LABELS[order.status]}
+          </Badge>
         </header>
 
-        <Card className="shadow-xl">
+        {/* Order Summary Card */}
+        <Card className="mb-10 shadow-xl">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-3 text-xl md:text-2xl">
+              <Package className="h-6 w-6" />
+              Order Summary
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            <div className="flex justify-between text-base md:text-lg">
+              <span>Total Paid</span>
+              <span className="font-bold">{formatPKR(order.finalAmount)}</span>
+            </div>
+            <div className="flex justify-between text-base md:text-lg">
+              <span>Payment Method</span>
+              <span className="font-medium flex items-center gap-2">
+                <CreditCard className="h-5 w-5" />
+                Card
+              </span>
+            </div>
+            <Separator />
+            <p className="text-sm text-muted-foreground text-center pt-2">
+              You can request up to <strong>{formatPKR(order.finalAmount)}</strong> as refund
+            </p>
+          </CardContent>
+        </Card>
+
+        {/* Refund Form */}
+        <Card className="shadow-2xl">
           <CardHeader className="pb-6">
-            <CardTitle className="text-xl md:text-2xl">Submit Refund Request</CardTitle>
-            <CardDescription className="text-sm md:text-base">
-              You can request a partial or full refund. Requests are reviewed within 24 hours.
+            <CardTitle className="text-xl md:text-2xl">Refund Request Form</CardTitle>
+            <CardDescription className="text-base">
+              Please fill in the details below. We typically process requests within 24 hours.
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleSubmit(onSubmit)} className="space-y-7">
+            <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
+              {/* Amount */}
               <div>
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-3">
-                  <Label htmlFor="amount" className="text-base md:text-lg">
-                    Refund Amount (PKR)
+                <div className="flex justify-between items-center mb-3">
+                  <Label htmlFor="amount" className="text-base md:text-lg font-medium">
+                    Refund Amount
                   </Label>
                   <span className="text-sm text-muted-foreground">
-                    Maximum: <strong>{formatPKR(order.finalAmount)}</strong>
+                    Max: <strong>{formatPKR(order.finalAmount)}</strong>
                   </span>
                 </div>
                 <Input
@@ -242,8 +296,8 @@ export default function OrderRefundRequestPage() {
                   min={1}
                   max={order.finalAmount}
                   step={1}
-                  placeholder="Enter amount"
-                  className="h-12 text-base"
+                  placeholder="Enter amount in PKR"
+                  className="h-14 text-lg"
                   {...register('amount', { valueAsNumber: true })}
                 />
                 {errors.amount && (
@@ -251,39 +305,53 @@ export default function OrderRefundRequestPage() {
                 )}
               </div>
 
+              {/* Reason */}
               <div>
-                <Label htmlFor="reason" className="text-base md:text-lg">
-                  Reason for Refund
+                <Label htmlFor="reason" className="text-base md:text-lg font-medium mb-3 block">
+                  Reason for Refund <span className="text-muted-foreground font-normal">(required)</span>
                 </Label>
                 <Textarea
                   id="reason"
-                  rows={6}
-                  placeholder="Please explain why you are requesting a refund (e.g., item was damaged, wrong item received, food quality issue, etc.)"
-                  className="mt-3 resize-none"
+                  rows={7}
+                  placeholder="Please explain in detail why you are requesting a refund. This helps us process your request faster and improve our service.
+
+Examples:
+• Food was cold upon arrival
+• Wrong item delivered
+• Missing items in order
+• Poor food quality"
+                  className="resize-none text-base"
                   {...register('reason')}
                 />
-                {errors.reason && (
-                  <p className="mt-2 text-sm text-destructive">{errors.reason.message}</p>
+                <div className="mt-2 flex justify-between text-sm">
+                  <p className={errors.reason ? 'text-destructive' : 'text-muted-foreground'}>
+                    {errors.reason?.message || 'Detailed reason helps us serve you better'}
+                  </p>
+                  <p className="text-muted-foreground">{watch('reason')?.length || 0}/500</p>
+                </div>
+              </div>
+
+              {/* Submit */}
+              <Button
+                type="submit"
+                size="lg"
+                className="w-full h-14 text-lg font-semibold shadow-lg bg-amber-600 hover:bg-amber-700"
+                disabled={
+                  requestRefundMutation.isPending ||
+                  requestedAmount <= 0 ||
+                  requestedAmount > order.finalAmount
+                }
+              >
+                {requestRefundMutation.isPending ? (
+                  <>Submitting Request...</>
+                ) : (
+                  <>Submit Refund Request</>
                 )}
-              </div>
+              </Button>
 
-              <div className="pt-4">
-                <Button
-                  type="submit"
-                  size="lg"
-                  className="w-full h-14 text-base md:text-lg font-semibold shadow-lg"
-                  disabled={
-                    isSubmitting ||
-                    requestedAmount <= 0 ||
-                    requestedAmount > order.finalAmount
-                  }
-                >
-                  {isSubmitting ? 'Submitting Request...' : 'Submit Refund Request'}
-                </Button>
-              </div>
-
-              <p className="text-center text-sm text-muted-foreground">
-                By submitting, you agree to our refund policy. Refunds are processed back to the original payment method.
+              <p className="text-center text-sm text-muted-foreground pt-4">
+                Refunds are processed back to your original card within 3–7 business days.
+                You’ll receive email updates on your request status.
               </p>
             </form>
           </CardContent>

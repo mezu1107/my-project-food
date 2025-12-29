@@ -1,7 +1,4 @@
 // src/components/menu/MenuItemCard.tsx
-// RESPONSIVE & PRODUCTION-READY — DECEMBER 29, 2025
-// Mobile-first, fluid, accessible, fully typed
-
 import { useState } from 'react';
 import { Leaf, Flame } from 'lucide-react';
 
@@ -18,17 +15,33 @@ interface MenuItemCardProps {
   className?: string;
 }
 
+const UNIT_LABELS: Record<string, string> = {
+  pc: 'per piece',
+  kg: 'per kg',
+  g: 'g',
+  ml: 'ml',
+  liter: 'liter',
+  bottle: 'bottle',
+  slice: 'slice',
+  cup: 'cup',
+  pack: 'pack',
+  dozen: 'dozen',
+  tray: 'tray',
+};
+
 export function MenuItemCard({ item, className = '' }: MenuItemCardProps) {
   const [modalOpen, setModalOpen] = useState<boolean>(false);
 
-  const isAvailable = item.isAvailable !== false; // default true
+  const isAvailable = item.isAvailable !== false;
+
+  const unitDisplay = UNIT_LABELS[item.unit] || item.unit;
 
   const handleCardClick = () => {
     if (isAvailable) setModalOpen(true);
   };
 
   const handleButtonClick = (e: React.MouseEvent<HTMLButtonElement>) => {
-    e.stopPropagation(); // Prevent card click when button clicked
+    e.stopPropagation();
     if (isAvailable) setModalOpen(true);
   };
 
@@ -53,7 +66,7 @@ export function MenuItemCard({ item, className = '' }: MenuItemCardProps) {
           }
         }}
       >
-        {/* Image Section */}
+        {/* Image */}
         <div className="relative w-full overflow-hidden rounded-lg bg-muted aspect-[4/3] md:aspect-[16/9] lg:aspect-[4/3]">
           <img
             src={item.image || '/placeholder-food.jpg'}
@@ -83,13 +96,16 @@ export function MenuItemCard({ item, className = '' }: MenuItemCardProps) {
             )}
           </div>
 
-          {/* Price Badge */}
+          {/* Price + Unit Badge */}
           <div className="absolute bottom-4 right-4">
             <Badge
               variant="default"
-              className="text-base sm:text-lg md:text-xl font-bold px-4 sm:px-5 py-2 sm:py-2.5 shadow-2xl backdrop-blur-sm bg-primary/90"
+              className="text-base sm:text-lg md:text-xl font-bold px-4 sm:px-5 py-2 sm:py-2.5 shadow-2xl backdrop-blur-sm bg-primary/90 flex flex-col items-end leading-tight"
             >
-              Rs. {Number(item.price).toLocaleString('en-IN')}
+              <span>Rs. {Number(item.price).toLocaleString('en-IN')}</span>
+              <span className="text-xs font-normal opacity-90 mt-0.5">
+                {unitDisplay}
+              </span>
             </Badge>
           </div>
         </div>
@@ -118,7 +134,6 @@ export function MenuItemCard({ item, className = '' }: MenuItemCardProps) {
         </CardContent>
       </Card>
 
-      {/* Add to Cart Modal */}
       <AddToCartModal
         menuItemId={item._id}
         open={modalOpen}
