@@ -1,15 +1,16 @@
 // src/components/PublicLayout.tsx
 import { Outlet } from "react-router-dom";
 import { Header } from "./Header";
+import { Footer } from "./Footer";        // ← Add this import
 import { Toaster } from "@/components/ui/toaster";
 
 export const PublicLayout: React.FC = () => {
   return (
     <div className="min-h-screen bg-background flex flex-col">
-      {/* Public Header */}
+      {/* Public Header - Fixed at top */}
       <Header />
 
-      {/* Page Content */}
+      {/* Page Content - Takes available space */}
       <main
         className="
           flex-1
@@ -23,6 +24,9 @@ export const PublicLayout: React.FC = () => {
       >
         <Outlet />
       </main>
+
+      {/* Footer - Always at the bottom */}
+      <Footer />
 
       {/* Global Toasts */}
       <Toaster />

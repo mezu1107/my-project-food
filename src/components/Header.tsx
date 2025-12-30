@@ -1,6 +1,6 @@
 // src/components/Header.tsx
 // FINAL PRODUCTION HEADER — FULLY RESPONSIVE (320px → 4K)
-// Foodpanda-inspired, mobile-first design
+// Foodpanda-inspired, mobile-first design with real logo
 // Cart badge only → redirects to /cart (no drawer editing)
 // Optimized for touch, accessibility, and fluid layout
 
@@ -62,14 +62,21 @@ export const Header = () => {
 
             {/* Logo & Brand */}
             <Link to="/" className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-green-600 to-emerald-600 text-lg font-bold text-white shadow-md">
-                AM
+              {/* Real logo image */}
+              <div className="relative h-10 w-10 overflow-hidden rounded-full bg-white shadow-md ring-1 ring-gray-200">
+                <img
+                  src="/logo.jpeg"
+                  alt="AlTawakkalfoods Logo"
+                  className="w-full h-full object-cover"
+                />
               </div>
 
               {/* Brand text: hidden on mobile, visible from sm+ */}
               <div className="hidden sm:block">
-                <h1 className="text-lg font-bold leading-tight">AM Foods</h1>
-                <p className="text-xs text-muted-foreground">Authentic Pakistani Cuisine</p>
+                <h1 className="font-bold text-lg leading-tight">
+                  AlTawakkalfoods
+                </h1>
+                <p className="text-xs text-muted-foreground">Pakistani Cuisine</p>
               </div>
             </Link>
 

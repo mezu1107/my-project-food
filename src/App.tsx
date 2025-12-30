@@ -53,11 +53,11 @@ import AddressListPage from "@/features/address/pages/AddressListPage";
 
 // Admin
 
-import AdminDashboard from "./pages/admin/Dashboard";
+// import AdminDashboard from "./pages/admin/Dashboard";
 import AdminOrders from "./pages/admin/orders/Orders";
 import AdminOrderDetails from "./pages/admin/orders/OrderDetails";
-import AdminUsers from "./pages/admin/Users";
-import AdminRiders from "./pages/admin/Riders";
+// import AdminUsers from "./pages/admin/Users";
+// import AdminRiders from "./pages/admin/Riders";
 import AdminDeals from "./pages/admin/Deals";
 import AdminMenuPage from "./features/menu/pages/AdminMenuPage";
 import EditMenuItemPage from "@/features/menu/pages/EditMenuItemPage";
@@ -76,9 +76,9 @@ import AdminReviewsDashboard from "./features/reviews/pages/AdminReviewsDashboar
 import KitchenDashboard from "./pages/kitchen/KitchenDashboard";
 
 // Rider
-import RiderLogin from "./pages/rider/Login";
-import RiderDashboard from "./pages/rider/Dashboard";
-import RiderDeliveries from "./pages/rider/Deliveries";
+// import RiderLogin from "./pages/rider/Login";
+// import RiderDashboard from "./pages/rider/Dashboard";
+// import RiderDeliveries from "./pages/rider/Deliveries";
 
 // Debug
 import DebugAPI from "./pages/DebugAPI";
@@ -152,10 +152,10 @@ export default function App() {
 
               {/* ====================== ADMIN ROUTES ====================== */}
               <Route path="/admin" element={<AdminLayout />}>
-  <Route index element={<AdminDashboard />} />
-  <Route path="dashboard" element={<AdminDashboard />} />
-  <Route path="users" element={<AdminUsers />} />
-  <Route path="riders" element={<AdminRiders />} />
+  {/* <Route index element={<AdminDashboard />} /> */}
+  {/* <Route path="dashboard" element={<AdminDashboard />} /> */}
+  {/* <Route path="users" element={<AdminUsers />} /> */}
+  {/* <Route path="riders" element={<AdminRiders />} /> */}
   <Route path="deals" element={<AdminDeals />} />
   <Route path="menu" element={<AdminMenuPage />} />
   <Route path="menu/edit/:id" element={<EditMenuItemPage />} />
@@ -181,10 +181,10 @@ export default function App() {
                 </Route>
               
               {/* ====================== RIDER ROUTES ====================== */}
-              <Route path="/rider/login" element={<RiderLogin />} />
+              {/* <Route path="/rider/login" element={<RiderLogin />} /> */}
               <Route path="/rider" element={<RiderLayout />}>
-                <Route index element={<RiderDashboard />} />
-                <Route path="deliveries" element={<RiderDeliveries />} />
+                {/* <Route index element={<RiderDashboard />} /> */}
+                {/* <Route path="deliveries" element={<RiderDeliveries />} /> */}
               </Route>
 
               {/* ====================== 404 ====================== */}
