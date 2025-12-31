@@ -1,70 +1,122 @@
 // src/types/area.ts
+// Consolidated & cleaned version — December 31, 2025
+// Removed duplicates, improved naming clarity, better separation of concerns
 
-// === GeoJSON Types ===
-export interface GeoPoint {
-  type: "Point";
+// ───────────────────────────────
+//          Geo Types
+// ───────────────────────────────
+
+/** Human/Leaflet friendly coordinate pair */
+export interface LatLng {
+  lat: number;
+  lng: number;
+}
+
+/** MongoDB GeoJSON Point (stored format) */
+export interface GeoJSONPoint {
+  type: 'Point';
   coordinates: [number, number]; // [lng, lat]
 }
 
-export interface GeoPolygon {
-  type: "Polygon";
-  coordinates: [number, number][][]; // [[[lng, lat], ...]]
+/** MongoDB GeoJSON Polygon (stored format) */
+export interface GeoJSONPolygon {
+  type: 'Polygon';
+  coordinates: [number, number][][]; // [[[lng,lat], ...]]
 }
 
-// === Delivery Zone ===
-export interface DeliveryZone {
-  _id: string;
-  deliveryFee: number;
-  minOrderAmount: number;
-  estimatedTime: string;
-  isActive: boolean;
-  createdAt: string;
-  updatedAt: string;
+/** Leaflet format — array of rings where each point is [lat, lng] */
+export type LeafletPolygon = [number, number][][];
+
+// ───────────────────────────────
+//       Area Core Types
+// ───────────────────────────────
+
+/** Data shape when creating/updating area from frontend (admin) */
+export interface AreaInput {
+  name: string;
+  city?: string;
+  center: LatLng;
+  polygon: GeoJSONPolygon;           // usually sent as-is from Leaflet
+  // Optional - rarely needed since backend can convert
+  mongoPolygon?: GeoJSONPolygon;
 }
 
-// === Area Types ===
-export interface Area {
+/** Full area shape returned by admin endpoints (with helpers) */
+export interface AreaAdmin {
   _id: string;
   name: string;
   city: string;
-  center: GeoPoint;
-  polygon: GeoPolygon;
+  center: GeoJSONPoint;
+  polygon: GeoJSONPolygon;
   isActive: boolean;
   createdAt: string;
-  updatedAt: string;
+  updatedAt?: string;
+
+  // Added by backend controllers for admin convenience
+  centerLatLng: LatLng | null;
+  polygonLatLng: LeafletPolygon | null;
+
+  deliveryZone: DeliveryZone | null;
+  hasDeliveryZone: boolean;
 }
+
+/** Lightweight version for lists, dropdowns, map markers */
+export interface AreaListItem {
+  _id: string;
+  name: string;
+  city: string;
+  centerLatLng: LatLng | null;
+  isActive: boolean;
+  hasDeliveryZone: boolean;
+  deliveryZone?: DeliveryZone | null;
+}
+
+/** Minimal area information used in customer-facing context */
+// src/types/area.ts
+
 export interface PublicArea {
   _id: string;
   name: string;
   city: string;
-  center: { type: 'Point'; coordinates: [number, number] };
-  deliveryZone?: {
-    deliveryFee: number;
-    minOrderAmount: number;
-    estimatedTime: string;
-    isActive?: boolean;
-  } | null;
-  hasDeliveryZone?: boolean;
+  centerLatLng: LatLng;                  // required
+  deliveryZone?: DeliveryZone | null;    // ← ADD THIS
 }
-export interface AreaWithCenter {
+
+// ───────────────────────────────
+//       Delivery Zone
+// ───────────────────────────────
+
+export interface DeliveryZone {
   _id: string;
-  name: string;
-  city: string;
-  centerLatLng: { lat: number; lng: number };
+  area: string; // Area _id
+  feeStructure: 'flat' | 'distance';
+
+  // Flat fee branch
+  deliveryFee?: number;
+
+  // Distance-based branch
+  baseFee?: number;
+  distanceFeePerKm?: number;
+  maxDistanceKm?: number;
+
+  minOrderAmount: number;
+  estimatedTime: string;
   isActive: boolean;
+  freeDeliveryAbove?: number; // NEW: minimum order for free delivery
   createdAt?: string;
   updatedAt?: string;
-
-  // THIS IS THE MISSING PART — CRITICAL!
-  deliveryZone?: DeliveryZone | null;
-  hasDeliveryZone?: boolean;
 }
 
-// === API Response Types ===
-export interface AreasResponse {
+
+// ───────────────────────────────
+//         API Responses
+// ───────────────────────────────
+
+export interface AreaListResponse {
   success: boolean;
-  areas: AreaWithCenter[];
-  pagination?: {
+  message: string;
+  areas: AreaAdmin[]; // or AreaListItem[] in list views
+  pagination: {
     total: number;
     page: number;
     pages: number;
@@ -72,25 +124,52 @@ export interface AreasResponse {
   };
 }
 
-export interface CheckAreaResponse {
+export interface SingleAreaResponse {
+  success: boolean;
+  message: string;
+  area: AreaAdmin;
+  deliveryZone: DeliveryZone | null;
+}
+
+export interface AreaToggleResponse {
+  success: boolean;
+  message: string;
+  area: {
+    _id: string;
+    name: string;
+    isActive: boolean;
+  };
+}
+
+/** Response from customer location check / calculateDeliveryFee */
+export interface LocationCheckResponse {
   success: boolean;
   inService: boolean;
-  hasDeliveryZone: boolean;
+  deliverable?: boolean;
   area?: {
     _id: string;
     name: string;
     city: string;
-    center: { lat: number; lng: number };
   };
-  delivery?: {
-    fee: number;
-    minOrder: number;
-    estimatedTime: string;
-  };
+  distanceKm?: string;
+  deliveryFee?: number;
+  minOrderAmount?: number;
+  estimatedTime?: string;
+  reason?: string;
   message?: string;
 }
-// === Menu Types (keep here or move to menu.types.ts if preferred) ===
-export type MenuCategory = "breakfast" | "lunch" | "dinner" | "desserts" | "beverages";
+
+// ───────────────────────────────
+//         Menu Types
+// (kept here for now — consider moving to menu.types.ts later)
+// ───────────────────────────────
+
+export type MenuCategory =
+  | 'breakfast'
+  | 'lunch'
+  | 'dinner'
+  | 'desserts'
+  | 'beverages';
 
 export interface MenuItem {
   _id: string;
@@ -117,7 +196,7 @@ export interface DeliveryInfo {
 export interface MenuByLocationResponse {
   success: boolean;
   inService: boolean;
-  area: Area | null;
+  area: PublicArea | null;
   delivery: DeliveryInfo | null;
   menu: MenuItem[];
   message?: string;

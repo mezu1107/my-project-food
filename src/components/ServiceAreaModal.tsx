@@ -1,27 +1,25 @@
+// src/components/ServiceAreaModal.tsx
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { MapPin, X, Loader2, Check } from "lucide-react";
+import { MapPin, X, Loader2, Check, Truck } from "lucide-react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { apiClient } from "@/lib/api";
-import { useAreaStore } from "@/lib/areaStore";
+import { useDeliveryStore } from "@/lib/deliveryStore";
+import { checkDeliveryAvailability } from "@/services/delivery";
 
 /* ---------------------------------------------------------
    Types
 ---------------------------------------------------------- */
-interface Coordinates {
-  lat: number;
-  lng: number;
-}
-
 interface Area {
   _id: string;
   name: string;
   city: string;
-  center: Coordinates;
+  center: { lat: number; lng: number };
+  freeDeliveryAbove?: number; // NEW
 }
 
 interface AreasResponse {
@@ -42,7 +40,7 @@ export default function ServiceAreaModal({
   onClose,
 }: ServiceAreaModalProps) {
   const navigate = useNavigate();
-  const { setSelectedArea: setSelectedAreaStore } = useAreaStore();
+  const { setCheckResult, setError, clearDelivery } = useDeliveryStore();
 
   const [areas, setAreas] = useState<Area[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
@@ -62,11 +60,11 @@ export default function ServiceAreaModal({
         setLoading(true);
         const response = await apiClient.get<AreasResponse>("/areas");
 
-        if (response.success) {
+        if (response.success && response.areas.length > 0) {
           setAreas(response.areas);
         } else {
           setAreas([]);
-          toast.error("No delivery areas available");
+          toast.info("No delivery areas configured yet");
         }
       } catch {
         toast.error("Failed to load delivery areas");
@@ -80,37 +78,57 @@ export default function ServiceAreaModal({
   }, [isOpen]);
 
   /* ---------------------------------------------------------
-     Confirm selection
+     Confirm selection – Use new distance-based check
   ---------------------------------------------------------- */
-  const handleConfirm = (): void => {
+  const handleConfirm = async (): Promise<void> => {
     if (!selectedArea) {
       toast.error("Please select a delivery area");
       return;
     }
 
-    setSelectedAreaStore({
-      id: selectedArea._id,
-      name: selectedArea.name,
-      city: selectedArea.city,
-      fullAddress: `${selectedArea.name}, ${selectedArea.city}`,
-      centerLatLng: selectedArea.center,
-      deliveryFee: undefined,
-      minOrderAmount: undefined,
-      estimatedTime: undefined,
-    });
+    const { lat, lng } = selectedArea.center;
 
-    toast.success(`Selected: ${selectedArea.name}`);
+    try {
+      const result = await checkDeliveryAvailability(lat, lng);
+
+      if (result.success && result.inService && result.deliverable) {
+        // Store full delivery info including freeDeliveryAbove
+        setCheckResult({
+          inService: true,
+          deliverable: true,
+          area: result.area,
+          city: result.city,
+          distanceKm: result.distanceKm,
+          deliveryFee: result.deliveryFee,
+          reason: result.reason,
+          minOrderAmount: result.minOrderAmount,
+          estimatedTime: result.estimatedTime,
+          freeDeliveryAbove: result.freeDeliveryAbove, // <- NEW
+        });
+
+        toast.success(
+          `Delivery confirmed in ${result.area}! Rs.${result.deliveryFee} (${result.reason})${
+            result.freeDeliveryAbove ? ` — Free delivery above Rs.${result.freeDeliveryAbove}` : ''
+          }`
+        );
+      } else {
+        setError(result.message || "Delivery not available");
+        clearDelivery();
+        toast.info(result.message || "Cannot deliver to this area");
+        return;
+      }
+    } catch {
+      toast.error("Failed to verify delivery");
+      setError("Connection error");
+      return;
+    }
+
     onClose();
-    navigate(`/menu/area/${selectedArea._id}`);
+    navigate(`/menu`);
   };
 
   /* ---------------------------------------------------------
      UI
-     Responsive strategy:
-     - Mobile-first
-     - max-w + clamp typography
-     - Scrollable list (no overflow X)
-     - Touch-friendly buttons
   ---------------------------------------------------------- */
   return (
     <Dialog.Root open={isOpen} onOpenChange={(open) => !open && onClose()}>
@@ -121,12 +139,7 @@ export default function ServiceAreaModal({
               initial={{ opacity: 0, scale: 0.96, y: 16 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.96, y: 16 }}
-              className="
-                w-full
-                max-w-screen-sm
-                sm:max-w-screen-md
-                lg:max-w-screen-lg
-              "
+              className="w-full max-w-screen-sm sm:max-w-screen-md lg:max-w-screen-lg"
             >
               <section className="overflow-hidden rounded-3xl bg-white shadow-xl">
                 {/* Header */}
@@ -138,7 +151,7 @@ export default function ServiceAreaModal({
                         Choose Delivery Area
                       </Dialog.Title>
                       <Dialog.Description className="mt-2 text-green-100 [font-size:clamp(0.95rem,2.5vw,1.1rem)]">
-                        Select where you'd like your food delivered
+                        Select your location to see delivery options
                       </Dialog.Description>
                     </div>
 
@@ -164,12 +177,12 @@ export default function ServiceAreaModal({
                     </div>
                   ) : areas.length === 0 ? (
                     <div className="py-16 text-center">
-                      <MapPin className="mx-auto mb-4 h-14 w-14 text-gray-300" />
+                      <Truck className="mx-auto mb-4 h-14 w-14 text-gray-300" />
                       <p className="text-lg font-semibold text-gray-700">
-                        No delivery areas yet
+                        No delivery areas available
                       </p>
                       <p className="mt-2 text-sm text-gray-500">
-                        We’re expanding soon!
+                        We’re working on expanding our service!
                       </p>
                     </div>
                   ) : (
@@ -177,8 +190,7 @@ export default function ServiceAreaModal({
                       {/* Areas List */}
                       <div className="mb-6 max-h-[50vh] space-y-3 overflow-y-auto pr-1">
                         {areas.map((area) => {
-                          const isSelected =
-                            selectedArea?._id === area._id;
+                          const isSelected = selectedArea?._id === area._id;
 
                           return (
                             <button
@@ -187,11 +199,11 @@ export default function ServiceAreaModal({
                               className={`
                                 w-full rounded-2xl border p-4 sm:p-5
                                 flex items-center justify-between
-                                transition
-                                focus:outline-none focus:ring-4
+                                transition-all duration-200
+                                focus:outline-none focus:ring-4 focus:ring-green-200
                                 ${
                                   isSelected
-                                    ? "border-green-500 bg-green-50 ring-green-200"
+                                    ? "border-green-500 bg-green-50 shadow-md"
                                     : "border-gray-200 hover:border-green-400 hover:bg-green-50/70"
                                 }
                               `}
@@ -200,18 +212,12 @@ export default function ServiceAreaModal({
                                 <div
                                   className={`
                                     rounded-xl p-3
-                                    ${
-                                      isSelected
-                                        ? "bg-green-600"
-                                        : "bg-gray-200"
-                                    }
+                                    ${isSelected ? "bg-green-600" : "bg-gray-200"}
                                   `}
                                 >
                                   <MapPin
                                     className={`h-6 w-6 ${
-                                      isSelected
-                                        ? "text-white"
-                                        : "text-gray-600"
+                                      isSelected ? "text-white" : "text-gray-600"
                                     }`}
                                   />
                                 </div>
@@ -220,9 +226,12 @@ export default function ServiceAreaModal({
                                   <p className="font-semibold text-gray-900">
                                     {area.name}
                                   </p>
-                                  <p className="text-sm text-gray-600">
-                                    {area.city}
-                                  </p>
+                                  <p className="text-sm text-gray-600">{area.city}</p>
+                                  {area.freeDeliveryAbove && (
+                                    <p className="mt-1 text-xs text-green-600 font-medium">
+                                      Free delivery above Rs.{area.freeDeliveryAbove}
+                                    </p>
+                                  )}
                                 </div>
                               </div>
 
@@ -237,7 +246,7 @@ export default function ServiceAreaModal({
                       {/* Confirm Button */}
                       <Button
                         onClick={handleConfirm}
-                        disabled={!selectedArea}
+                        disabled={!selectedArea || loading}
                         className="
                           w-full
                           min-h-[3.5rem]
@@ -249,12 +258,12 @@ export default function ServiceAreaModal({
                         "
                       >
                         {selectedArea
-                          ? `Deliver to ${selectedArea.name}`
+                          ? `Check Delivery in ${selectedArea.name}`
                           : "Select an area to continue"}
                       </Button>
 
                       <p className="mt-4 text-center text-xs text-gray-500">
-                        Delivery fee & time shown after selection
+                        Delivery fee, time, and availability will be confirmed after selection
                       </p>
                     </>
                   )}

@@ -1,19 +1,22 @@
-// src/hooks/useCheckArea.ts
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api';
-import type { PublicArea, CheckAreaResponse } from '@/types/area';
 
-// Hook 1: Check delivery availability by coordinates
+import type { 
+  DeliveryCalculateResponse, 
+  DeliveryNotInServiceResponse 
+} from '@/types/delivery.types';
+
+// Hook: Check delivery availability using /api/delivery/calculate endpoint
 export const useCheckArea = (lat?: number, lng?: number) => {
-  return useQuery<CheckAreaResponse, Error>({
-    queryKey: ['area-check', lat, lng],
+  return useQuery<DeliveryCalculateResponse | DeliveryNotInServiceResponse, Error>({
+    queryKey: ['delivery-check', lat, lng],
     queryFn: async () => {
       if (!lat || !lng) throw new Error('Coordinates required');
 
-      // IMPORTANT: apiClient.get() already returns res.data → no need for .data destructuring
-      return apiClient.get<CheckAreaResponse>('/areas/check', {
-        params: { lat, lng },
-      });
+      return apiClient.post<DeliveryCalculateResponse | DeliveryNotInServiceResponse>(
+        '/delivery/calculate',
+        { lat, lng }
+      );
     },
     enabled: !!lat && !!lng,
     staleTime: 5 * 60 * 1000, // 5 minutes
@@ -21,13 +24,26 @@ export const useCheckArea = (lat?: number, lng?: number) => {
   });
 };
 
-// Hook 2: Get all active public areas (with delivery info)
+// Optional: List of active areas (from /api/areas)
+interface SimpleArea {
+  _id: string;
+  name: string;
+  city: string;
+  center: { lat: number; lng: number };
+  deliveryZone?: {
+    deliveryFee: number;
+    minOrderAmount: number;
+    estimatedTime: string;
+    isActive: boolean;
+  } | null;
+  hasDeliveryZone?: boolean;
+}
+
 export const useAreas = () => {
-  return useQuery<PublicArea[], Error>({
+  return useQuery<SimpleArea[], Error>({
     queryKey: ['areas', 'active'],
     queryFn: async () => {
-      // Again: apiClient.get() returns the data directly
-      const response = await apiClient.get<{ success: boolean; areas: PublicArea[] }>('/areas');
+      const response = await apiClient.get<{ success: boolean; areas: SimpleArea[] }>('/areas');
 
       if (!response.success) {
         throw new Error('Failed to fetch areas');
@@ -35,7 +51,7 @@ export const useAreas = () => {
 
       return response.areas;
     },
-    staleTime: 15 * 60 * 1000, // 15 minutes
+    staleTime: 15 * 60 * 1000,
     retry: 1,
   });
 };

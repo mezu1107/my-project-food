@@ -20,7 +20,7 @@ interface Props {
   address?: Address | null;
 }
 
-const CITIES = ['Lahore', 'Karachi', 'Islamabad', 'Rawalpindi', 'Faisalabad'] as const;
+const CITIES = ['Islamabad', 'Rawalpindi', ] as const;
 
 export const AddressFormModal = ({ open, onClose, address }: Props) => {
   const isMobile = useIsMobile();

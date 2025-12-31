@@ -8,20 +8,13 @@ import {
   useMap,
   useMapEvents,
 } from 'react-leaflet';
-import {
-  LatLngExpression,
-  LatLngTuple,
-  icon,
-  divIcon,
-  point,
-} from 'leaflet';
-import type { Map as LeafletMap } from 'leaflet';
+import type { Map as LeafletMap, LatLngTuple } from 'leaflet';
 import L from 'leaflet';
 
 import 'leaflet/dist/leaflet.css';
 import { Trash2, Edit3, RotateCcw, AlertCircle } from 'lucide-react';
 
-// Fix default Leaflet marker icons
+// Fix default marker icons
 delete (L.Icon.Default.prototype as any)._getIconUrl;
 L.Icon.Default.mergeOptions({
   iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
@@ -88,10 +81,10 @@ function MapClickHandler({
 
       const newPoint: [number, number] = [e.latlng.lat, e.latlng.lng];
 
-      // Smoothly pan the map to the clicked point
+      // Smoothly pan to clicked point
       map.flyTo(e.latlng, map.getZoom(), { duration: 0.7 });
 
-      // Update the center state
+      // Update center
       onCenterChange({ lat: e.latlng.lat, lng: e.latlng.lng });
 
       if (polygon.length === 0 || polygon[0].length === 0) {
@@ -107,7 +100,7 @@ function MapClickHandler({
         return;
       }
 
-      // Insert on nearest edge if click is close enough
+      // Insert on nearest edge if close enough
       const layerPoint = map.latLngToLayerPoint(e.latlng);
       let closestDist = Infinity;
       let insertIdx = -1;
@@ -116,7 +109,7 @@ function MapClickHandler({
         const p1 = map.latLngToLayerPoint(L.latLng(ring[i][0], ring[i][1]));
         const p2 = map.latLngToLayerPoint(L.latLng(ring[i + 1][0], ring[i + 1][1]));
         const closest = L.LineUtil.closestPointOnSegment(layerPoint, p1, p2);
-        const dist = point(layerPoint).distanceTo(closest);
+        const dist = L.point(layerPoint).distanceTo(closest);
 
         if (dist < closestDist && dist < 40) {
           closestDist = dist;
@@ -180,12 +173,13 @@ function MapDrawController({
 
       const latlngs = ring.map((p) => [p[0], p[1]] as LatLngTuple);
 
+      // Create custom pane for flowing line
       if (!map.getPane('flowPane')) {
         map.createPane('flowPane').style.zIndex = '650';
       }
 
       polylineRef.current = L.polyline(latlngs, {
-        color: '#10b981',
+        color: '#f59e0b', // golden amber
         weight: 8,
         opacity: 0.9,
         dashArray: '30 20',
@@ -195,15 +189,16 @@ function MapDrawController({
 
       animateDash();
 
+      // Numbered draggable markers
       ring.slice(0, -1).forEach(([lat, lng], idx) => {
         const marker = L.marker([lat, lng], {
           draggable: !readonly,
-          icon: divIcon({
+          icon: L.divIcon({
             html: `
               <div class="relative">
-                <div class="absolute inset-0 w-12 h-12 rounded-full animate-ping bg-emerald-500 opacity-60"></div>
-                <div class="relative w-12 h-12 bg-white rounded-full shadow-2xl ring-4 ring-white flex items-center justify-center border-4 border-emerald-600">
-                  <span class="font-black text-lg text-emerald-700">${idx + 1}</span>
+                <div class="absolute inset-0 w-12 h-12 rounded-full animate-ping bg-amber-500 opacity-60"></div>
+                <div class="relative w-12 h-12 bg-white rounded-full shadow-2xl ring-4 ring-white flex items-center justify-center border-4 border-amber-600">
+                  <span class="font-black text-lg text-amber-700">${idx + 1}</span>
                 </div>
               </div>
             `,
@@ -243,7 +238,6 @@ function MapDrawController({
   return null;
 }
 
-// Forward ref to expose the Leaflet map instance
 const AreaMapDrawer = forwardRef<LeafletMap, AreaMapDrawerProps>(
   (
     {
@@ -256,7 +250,7 @@ const AreaMapDrawer = forwardRef<LeafletMap, AreaMapDrawerProps>(
     },
     ref
   ) => {
-    const position: LatLngExpression = [center.lat, center.lng];
+    const position: LatLngTuple = [center.lat, center.lng];
     const polygonPositions: LatLngTuple[][] = polygon.map((ring) =>
       ring.map(([lat, lng]) => [lat, lng] as LatLngTuple)
     );
@@ -268,6 +262,7 @@ const AreaMapDrawer = forwardRef<LeafletMap, AreaMapDrawerProps>(
     const resetPolygon = () => {
       if (confirm('Clear the entire polygon? This cannot be undone.')) {
         onPolygonChange([]);
+        onCenterChange({ lat: 33.5651, lng: 73.0169 });
       }
     };
 
@@ -296,7 +291,7 @@ const AreaMapDrawer = forwardRef<LeafletMap, AreaMapDrawerProps>(
     };
 
     return (
-      <div className="relative w-full h-[600px] rounded-3xl overflow-hidden shadow-2xl border-8 border-emerald-600">
+      <div className="relative w-full h-[600px] rounded-3xl overflow-hidden shadow-2xl border-8 border-amber-600">
         <MapContainer
           ref={ref}
           center={position}
@@ -313,7 +308,7 @@ const AreaMapDrawer = forwardRef<LeafletMap, AreaMapDrawerProps>(
             polygon={polygon}
             onPolygonChange={onPolygonChange}
             readonly={readonly}
-            onCenterChange={onCenterChange} // <-- smooth pan prop
+            onCenterChange={onCenterChange}
           />
           <MapDrawController polygon={polygon} onPolygonChange={onPolygonChange} readonly={readonly} />
 
@@ -321,7 +316,7 @@ const AreaMapDrawer = forwardRef<LeafletMap, AreaMapDrawerProps>(
             <Polygon
               positions={polygonPositions}
               pathOptions={{
-                fillColor: '#16a34a',
+                fillColor: '#f59e0b', // golden
                 fillOpacity: readonly ? 0.3 : 0.4,
                 weight: 0,
                 color: 'transparent',
@@ -329,15 +324,9 @@ const AreaMapDrawer = forwardRef<LeafletMap, AreaMapDrawerProps>(
             />
           )}
 
+          {/* Delivery Center Marker */}
           <Marker
             position={position}
-            icon={icon({
-              iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-              shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
-              iconSize: [38, 48],
-              iconAnchor: [19, 48],
-              className: 'animate-pulse',
-            })}
             draggable={!readonly}
             eventHandlers={{
               dragend: (e) => {
@@ -347,7 +336,7 @@ const AreaMapDrawer = forwardRef<LeafletMap, AreaMapDrawerProps>(
             }}
           >
             <div className="pointer-events-none">
-              <div className="bg-white/95 backdrop-blur px-6 py-3 rounded-full shadow-2xl font-black text-emerald-700 text-lg border-4 border-emerald-600">
+              <div className="bg-white/95 backdrop-blur px-6 py-3 rounded-full shadow-2xl font-black text-amber-700 text-lg border-4 border-amber-600">
                 Delivery Center
               </div>
             </div>
@@ -381,7 +370,7 @@ const AreaMapDrawer = forwardRef<LeafletMap, AreaMapDrawerProps>(
         {/* Points List Panel */}
         {!readonly && pointCount > 0 && (
           <div className="absolute right-4 top-24 w-96 max-h-[520px] bg-white/95 backdrop-blur-lg rounded-2xl shadow-2xl border border-gray-200 overflow-hidden z-10">
-            <div className="bg-gradient-to-r from-emerald-600 to-green-600 text-white p-5">
+            <div className="bg-gradient-to-r from-amber-600 to-amber-500 text-white p-5">
               <h3 className="font-black text-xl">Polygon Points ({pointCount})</h3>
               <p className="text-sm opacity-90 mt-1">
                 {isValid ? '✓ Valid zone' : 'Need at least 3 points'}
@@ -394,7 +383,7 @@ const AreaMapDrawer = forwardRef<LeafletMap, AreaMapDrawerProps>(
                   className="bg-gray-50 hover:bg-gray-100 rounded-xl p-4 transition-all border border-gray-200"
                 >
                   <div className="flex items-center justify-between mb-2">
-                    <div className="font-bold text-emerald-600 text-lg">Point #{i + 1}</div>
+                    <div className="font-bold text-amber-600 text-lg">Point #{i + 1}</div>
                     <div className="flex gap-2">
                       <button
                         onClick={() => editPoint(i, lat, lng)}
@@ -424,18 +413,18 @@ const AreaMapDrawer = forwardRef<LeafletMap, AreaMapDrawerProps>(
 
         {/* Stats Panel */}
         {showStats && (
-          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 bg-black/90 backdrop-blur-2xl text-white px-10 py-6 rounded-3xl shadow-2xl border border-emerald-500/50">
+          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 bg-black/90 backdrop-blur-2xl text-white px-10 py-6 rounded-3xl shadow-2xl border border-amber-500/50">
             <div className="flex items-center gap-10">
               <div className="text-center">
                 <p className="text-sm opacity-80">Area</p>
                 <p className="font-black text-4xl">{km2} km²</p>
               </div>
-              <div className="w-px h-20 bg-emerald-500/50" />
+              <div className="w-px h-20 bg-amber-500/50" />
               <div className="text-center">
                 <p className="text-sm opacity-80">Acres</p>
                 <p className="font-black text-4xl">{acres}</p>
               </div>
-              <div className="w-px h-20 bg-emerald-500/50" />
+              <div className="w-px h-20 bg-amber-500/50" />
               <div className="text-center">
                 <p className="text-sm opacity-80">Points</p>
                 <p className="font-black text-4xl">{pointCount}</p>
@@ -443,7 +432,7 @@ const AreaMapDrawer = forwardRef<LeafletMap, AreaMapDrawerProps>(
             </div>
             <div className="mt-4 text-center">
               {isValid ? (
-                <p className="text-emerald-400 font-bold text-lg">✓ Ready — Valid delivery zone</p>
+                <p className="text-amber-400 font-bold text-lg">✓ Ready — Valid delivery zone</p>
               ) : pointCount === 0 ? (
                 <p className="text-yellow-400 font-bold flex items-center justify-center gap-2">
                   <AlertCircle size={20} />

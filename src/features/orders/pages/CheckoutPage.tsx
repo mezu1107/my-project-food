@@ -1,10 +1,10 @@
 // src/features/orders/pages/CheckoutPage.tsx
-// PRODUCTION-READY — DECEMBER 29, 2025
-// Dynamic delivery fee/minOrder/estimatedTime from area
-// Full unit support in item summary
-// Professional, responsive, mobile-first design
+// PRODUCTION READY — December 31, 2025
+// Uses real shape from useAreas()
+// Full free delivery support
+// Strong null-safety
 
-import { useEffect, useMemo,useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -43,6 +43,7 @@ import {
   Building2,
   Smartphone,
   Package,
+  CheckCircle2,
 } from 'lucide-react';
 
 import { toast } from 'sonner';
@@ -53,7 +54,25 @@ import { useAddresses } from '@/features/address/hooks/useAddresses';
 import { useAreas } from '@/hooks/useCheckArea';
 import { useCreateOrder, useCreateGuestOrder } from '@/features/orders/hooks/useOrders';
 import { UNIT_LABELS } from '@/types/order.types';
-import type { PublicArea } from '@/types/area';
+
+// =============================================
+//           Checkout-specific Area Type
+// =============================================
+type CheckoutArea = {
+  _id: string;
+  name: string;
+  city: string;
+  center: { lat: number; lng: number }; // we don't use it here but it's present
+  deliveryZone?:
+    | {
+        deliveryFee: number;
+        minOrderAmount: number;
+        estimatedTime: string;
+        isActive: boolean;
+        freeDeliveryAbove?: number; // ← support new field
+      }
+    | null;
+};
 
 const baseSchema = z.object({
   paymentMethod: z.enum(['cash', 'card', 'easypaisa', 'jazzcash', 'bank', 'wallet'], {
@@ -93,10 +112,10 @@ export default function CheckoutPage() {
   const createOrder = useCreateOrder();
   const createGuestOrder = useCreateGuestOrder();
 
-  // Dynamic delivery state
   const [deliveryFee, setDeliveryFee] = useState<number>(0);
   const [minOrderAmount, setMinOrderAmount] = useState<number>(0);
   const [estimatedTime, setEstimatedTime] = useState<string>('—');
+  const [freeDeliveryThreshold, setFreeDeliveryThreshold] = useState<number | null>(null);
 
   const schema = isAuthenticated ? authenticatedSchema : guestSchema;
 
@@ -119,13 +138,13 @@ export default function CheckoutPage() {
 
   const subtotal = getTotal();
   const total = useMemo(() => subtotal + deliveryFee, [subtotal, deliveryFee]);
-  const isMinOrderMet = subtotal >= minOrderAmount || minOrderAmount === 0;
+
+  const isMinOrderMet = minOrderAmount === 0 || subtotal >= minOrderAmount;
 
   const selectedAddressId = watch('addressId');
   const guestAreaId = watch('guestAddress.areaId');
   const guestFullAddress = watch('guestAddress.fullAddress');
 
-  // Prevent empty cart
   useEffect(() => {
     if (items.length === 0) {
       toast.info('Your cart is empty');
@@ -133,11 +152,34 @@ export default function CheckoutPage() {
     }
   }, [items.length, navigate]);
 
-  // Update delivery info for authenticated users
+  const updateDeliveryInfo = (area?: CheckoutArea) => {
+    if (!area?.deliveryZone || !area.deliveryZone.isActive) {
+      setDeliveryFee(0);
+      setMinOrderAmount(0);
+      setEstimatedTime('—');
+      setFreeDeliveryThreshold(null);
+      return;
+    }
+
+    const zone = area.deliveryZone;
+
+    const baseFee = zone.deliveryFee ?? 0;
+    const threshold = zone.freeDeliveryAbove ?? null;
+
+    const finalFee = threshold !== null && subtotal >= threshold ? 0 : baseFee;
+
+    setDeliveryFee(finalFee);
+    setMinOrderAmount(zone.minOrderAmount ?? 0);
+    setEstimatedTime(zone.estimatedTime || '—');
+    setFreeDeliveryThreshold(threshold);
+  };
+
+  // Authenticated flow
   useEffect(() => {
     if (!isAuthenticated || addressesLoading || areasLoading) return;
 
-    const selectedAddr = addresses.find((a) => a._id === selectedAddressId) ||
+    const selectedAddr =
+      addresses.find((a) => a._id === selectedAddressId) ||
       addresses.find((a) => a.isDefault) ||
       addresses[0];
 
@@ -147,7 +189,7 @@ export default function CheckoutPage() {
     }
   }, [selectedAddressId, addresses, areas, isAuthenticated, addressesLoading, areasLoading]);
 
-  // Update delivery info for guest users
+  // Guest flow
   useEffect(() => {
     if (isAuthenticated || !guestAreaId || areasLoading) return;
 
@@ -155,21 +197,9 @@ export default function CheckoutPage() {
     updateDeliveryInfo(area);
   }, [guestAreaId, areas, isAuthenticated, areasLoading]);
 
-  const updateDeliveryInfo = (area?: PublicArea) => {
-    if (area?.deliveryZone) {
-      setDeliveryFee(area.deliveryZone.deliveryFee ?? 0);
-      setMinOrderAmount(area.deliveryZone.minOrderAmount ?? 0);
-      setEstimatedTime(area.deliveryZone.estimatedTime || '—');
-    } else {
-      setDeliveryFee(0);
-      setMinOrderAmount(0);
-      setEstimatedTime('—');
-    }
-  };
-
   const canProceed =
     isMinOrderMet &&
-    (isAuthenticated ? !!selectedAddressId : !!guestAreaId && !!guestFullAddress?.trim());
+    (isAuthenticated ? !!selectedAddressId : !!(guestAreaId && guestFullAddress?.trim()));
 
   const onSubmit = async (data: CheckoutForm) => {
     if (!canProceed) {
@@ -217,7 +247,7 @@ export default function CheckoutPage() {
         });
       }
 
-      if (response.clientSecret) {
+      if (response?.clientSecret) {
         navigate('/checkout/card', {
           state: {
             clientSecret: response.clientSecret,
@@ -226,7 +256,7 @@ export default function CheckoutPage() {
           },
           replace: true,
         });
-      } else if (response.bankDetails) {
+      } else if (response?.bankDetails) {
         navigate('/checkout/bank-transfer', {
           state: {
             order: response.order,
@@ -235,7 +265,7 @@ export default function CheckoutPage() {
           replace: true,
         });
       } else {
-        navigate(`/track/${response.order._id}`, { replace: true });
+        navigate(`/track/${response?.order._id}`, { replace: true });
       }
     } catch (error: any) {
       toast.error(error.response?.data?.message || 'Failed to place order');
@@ -276,7 +306,7 @@ export default function CheckoutPage() {
               </Card>
             )}
 
-            {/* Delivery Address */}
+            {/* Delivery Address Section */}
             <Card className="shadow-lg">
               <CardHeader>
                 <CardTitle className="flex items-center gap-3 text-xl md:text-2xl">
@@ -289,8 +319,10 @@ export default function CheckoutPage() {
                   </CardDescription>
                 )}
               </CardHeader>
+
               <CardContent className="space-y-6">
                 {isAuthenticated ? (
+                  // ── Authenticated ──
                   addressesLoading || areasLoading ? (
                     <div className="py-12 text-center">
                       <Loader2 className="h-10 w-10 animate-spin mx-auto text-primary" />
@@ -326,6 +358,7 @@ export default function CheckoutPage() {
                     </Alert>
                   )
                 ) : (
+                  // ── Guest ──
                   <>
                     <div>
                       <Label className="text-base md:text-lg">Delivery Area *</Label>
@@ -348,7 +381,9 @@ export default function CheckoutPage() {
                                     <div>
                                       <p className="font-medium">{area.name}</p>
                                       <p className="text-sm text-muted-foreground">
-                                        Delivery: Rs. {area.deliveryZone?.deliveryFee ?? '—'}
+                                        {area.deliveryZone?.deliveryFee != null
+                                          ? `Delivery: Rs. ${area.deliveryZone.deliveryFee}`
+                                          : 'Delivery available'}
                                       </p>
                                     </div>
                                   </SelectItem>
@@ -478,7 +513,7 @@ export default function CheckoutPage() {
             </div>
           </section>
 
-          {/* Right Column: Summary */}
+          {/* Right Column: Order Summary */}
           <aside className="lg:col-span-1">
             <Card className="sticky top-6 shadow-2xl">
               <CardHeader>
@@ -488,7 +523,6 @@ export default function CheckoutPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-6">
-                {/* Items List */}
                 <div className="space-y-4 max-h-80 overflow-y-auto pr-2">
                   {items.map((item) => (
                     <div key={item._id} className="space-y-2">
@@ -496,12 +530,12 @@ export default function CheckoutPage() {
                         <div className="flex items-center gap-3">
                           <span className="font-bold text-lg">{item.quantity}x</span>
                           <div>
-                            <div  className="font-medium">
+                            <p className="font-medium">
                               {item.menuItem.name}
                               <Badge variant="outline" className="ml-2 text-xs">
                                 {UNIT_LABELS[item.menuItem.unit] || item.menuItem.unit}
                               </Badge>
-                            </div >
+                            </p>
                           </div>
                         </div>
                         <p className="font-medium text-right">
@@ -509,13 +543,10 @@ export default function CheckoutPage() {
                         </p>
                       </div>
 
-                      {/* Add-ons with units */}
                       {[...(item.sides || []), ...(item.drinks || []), ...(item.addOns || [])].length > 0 && (
                         <div className="ml-12 space-y-1 text-sm text-muted-foreground">
                           {[...(item.sides || []), ...(item.drinks || []), ...(item.addOns || [])].map((addon, i) => (
-                            <p key={i} className="flex justify-between">
-                              <span>• {addon}</span>
-                            </p>
+                            <p key={i}>• {addon}</p>
                           ))}
                         </div>
                       )}
@@ -525,16 +556,32 @@ export default function CheckoutPage() {
 
                 <Separator className="my-6" />
 
-                {/* Totals */}
                 <div className="space-y-4 text-base md:text-lg">
                   <div className="flex justify-between">
                     <span>Subtotal</span>
                     <span>Rs. {subtotal.toLocaleString()}</span>
                   </div>
-                  <div className="flex justify-between">
+
+                  <div className="flex justify-between items-center">
                     <span>Delivery Fee</span>
-                    <span>Rs. {deliveryFee.toLocaleString()}</span>
+                    {freeDeliveryThreshold !== null && subtotal >= freeDeliveryThreshold ? (
+                      <div className="flex items-center gap-2 text-green-600 dark:text-green-400">
+                        <CheckCircle2 className="h-4 w-4" />
+                        <span className="line-through text-muted-foreground/70">
+                          Rs. {deliveryFee.toLocaleString()}
+                        </span>
+                        <span>Free</span>
+                      </div>
+                    ) : (
+                      <span>Rs. {deliveryFee.toLocaleString()}</span>
+                    )}
                   </div>
+
+                  {freeDeliveryThreshold !== null && subtotal < freeDeliveryThreshold && (
+                    <p className="text-sm text-muted-foreground text-right">
+                      Free delivery on orders above Rs. {freeDeliveryThreshold.toLocaleString()}
+                    </p>
+                  )}
                 </div>
 
                 <Separator className="my-6" />

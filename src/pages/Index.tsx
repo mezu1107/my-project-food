@@ -1,5 +1,6 @@
 // src/pages/Index.tsx
-// Updated: December 28, 2025 — Fully Responsive & Mobile-Optimized
+// Updated: December 31, 2025 — Fully Responsive, Mobile-Optimized, Type-Safe
+// Fixed: Type mismatch on AreaChecker onConfirmed prop
 
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
@@ -14,7 +15,11 @@ import ServiceAreaModal from "@/components/ServiceAreaModal";
 import { useAreaStore } from "@/lib/areaStore";
 import { Button } from "@/components/ui/button";
 import { apiClient } from "@/lib/api";
-import { Area } from "@/types/area";
+import { AreaListItem } from "@/types/area";
+
+// Import the exact type that AreaChecker expects
+// (you can also move ConfirmedPayload to a shared types file later)
+import type { ConfirmedPayload } from "@/components/AreaChecker";
 
 interface SelectedArea {
   id: string;
@@ -30,10 +35,10 @@ export default function Index() {
   const [showChecker, setShowChecker] = useState(false);
   const [showAreaList, setShowAreaList] = useState(false);
 
-  const { data: areas = [] } = useQuery<Area[]>({
+  const { data: areas = [] } = useQuery<AreaListItem[]>({
     queryKey: ["areas"],
     queryFn: async () => {
-      const res = await apiClient.get<{ areas: Area[] }>("/areas");
+      const res = await apiClient.get<{ success: boolean; areas: AreaListItem[] }>("/areas");
       return res.areas || [];
     },
     staleTime: 10 * 60 * 1000,
@@ -45,7 +50,7 @@ export default function Index() {
     if (!selectedArea && !hasChecked && areas.length > 0) {
       setShowChecker(true);
     }
-  }, [selectedArea, areas]);
+  }, [selectedArea, areas.length]);
 
   const openChecker = () => {
     setSelectedArea(null);
@@ -54,21 +59,30 @@ export default function Index() {
     setShowAreaList(false);
   };
 
-  const handleAreaConfirmed = (areaData: any) => {
+  const handleAreaConfirmed = (payload: ConfirmedPayload) => {
+    const { area, delivery } = payload;
+
     const selectedAreaData: SelectedArea = {
-      id: areaData._id,
-      fullAddress: areaData.fullAddress || `${areaData.name}, ${areaData.city}`,
-      name: areaData.name,
-      city: areaData.city,
-      centerLatLng: areaData.centerLatLng || areaData.center,
+      id: area._id,
+      fullAddress: `${area.name}, ${area.city}`,
+      name: area.name,
+      city: area.city,
+      centerLatLng: {
+        lat: area.center?.lat ?? 0,
+        lng: area.center?.lng ?? 0,
+      },
     };
 
     setSelectedArea(selectedAreaData);
     sessionStorage.setItem("areaChecked", "true");
     setShowChecker(false);
-    toast.success(`Delivering to ${areaData.name}!`);
 
-    navigate(`/menu/area/${areaData._id}`);
+    toast.success(`Delivering to ${area.name}!`);
+
+    // Optional: You could also store delivery info in store here
+    // useDeliveryStore.getState().setDeliveryArea(area, delivery);
+
+    navigate(`/menu/area/${area._id}`);
   };
 
   const handleNotInService = () => {
@@ -78,7 +92,7 @@ export default function Index() {
 
   return (
     <>
-      {/* Area Checker Modal — Full-screen on mobile, centered card on larger */}
+      {/* Area Checker Modal */}
       <AnimatePresence>
         {showChecker && (
           <motion.div
@@ -94,7 +108,6 @@ export default function Index() {
               transition={{ type: "spring", damping: 30, stiffness: 300 }}
               className="relative w-full max-w-lg sm:max-w-xl bg-card rounded-3xl shadow-2xl border border-border overflow-hidden"
             >
-              {/* Close Button — Larger tap area on mobile */}
               <button
                 onClick={() => setShowChecker(false)}
                 className="absolute top-4 right-4 z-10 text-white sm:text-foreground bg-black/20 sm:bg-transparent rounded-full p-2 hover:bg-black/40 sm:hover:bg-muted transition"
@@ -103,7 +116,6 @@ export default function Index() {
                 <X className="h-7 w-7 sm:h-6 sm:w-6" />
               </button>
 
-              {/* Header */}
               <div className="bg-gradient-to-r from-green-600 to-emerald-600 p-6 sm:p-8 text-white">
                 <div className="flex items-center gap-4">
                   <MapPin className="h-10 w-10 sm:h-12 sm:w-12 flex-shrink-0" />
@@ -114,7 +126,6 @@ export default function Index() {
                 </div>
               </div>
 
-              {/* Body */}
               <div className="p-6 sm:p-8 space-y-8">
                 <AreaChecker
                   onConfirmed={handleAreaConfirmed}
@@ -153,12 +164,12 @@ export default function Index() {
         }}
       />
 
-      {/* Main Content — Blur & disable interaction when modal open */}
+      {/* Main Content */}
       <div className={showChecker || showAreaList ? "pointer-events-none select-none blur-sm sm:blur-none" : ""}>
         <Home openAreaChecker={openChecker} />
       </div>
 
-      {/* Floating Change Location Button — Responsive & Touch-Friendly */}
+      {/* Floating Change Location Button */}
       {selectedArea && (
         <motion.div
           initial={{ y: 100, opacity: 0 }}

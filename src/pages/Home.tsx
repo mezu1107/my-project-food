@@ -85,7 +85,7 @@ export const Home = ({ openAreaChecker }: HomeProps = {}) => {
           className="absolute left-0 top-1/2 -translate-y-1/2 hidden lg:block pointer-events-none"
         >
           <img
-            src="https://lookaside.fbsbx.com/lookaside/crawler/media/?media_id=1207398181410403"
+              src="/Chicken-Karahi.jpg"
             alt="Authentic Chicken Karahi"
             className="w-80 lg:w-96 2xl:w-[500px] rounded-3xl shadow-2xl border-8 border-white/80 rotate-[-12deg] hover:rotate-[-8deg] transition-transform duration-700"
           />

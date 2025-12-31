@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { apiClient } from '@/lib/api';
 import { Address, AddressFormData } from '../types/address.types';
-import { AreasResponse, AreaWithCenter } from '@/types/area';
+import { AreaListResponse, AreaListItem } from '@/types/area';
 
 const API_BASE = '/address';
 
@@ -72,11 +72,13 @@ export const useSetDefaultAddress = () => {
 };
 
 export const useAreasByCity = (city: string) => {
-  return useQuery({
+  return useQuery<AreaListItem[]>({
     queryKey: ['areas', city],
-    queryFn: async (): Promise<AreaWithCenter[]> => {
-      const res = await apiClient.get<AreasResponse>('/areas');
-      return res.areas.filter(a => a.city.toLowerCase() === city.toLowerCase());
+    queryFn: async () => {
+      const res = await apiClient.get<AreaListResponse>('/areas');
+      return res.areas.filter(
+        (a) => a.city?.toLowerCase() === city.toLowerCase()
+      );
     },
     enabled: !!city,
     staleTime: 10 * 60 * 1000,

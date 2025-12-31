@@ -1,9 +1,7 @@
 // src/pages/admin/areas/AddArea.tsx
-// PRODUCTION-READY — FULLY RESPONSIVE (320px → 4K)
-// Mobile-first admin area creation with map drawing & manual input
-// Fluid layout, touch-friendly, accessible, beautiful gradient design
+// Improved version - Better contrast & readability - January 2026
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -24,42 +22,45 @@ import {
 } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, MapPin, AlertCircle } from 'lucide-react';
+import { Loader2, MapPin, AlertCircle, Truck } from 'lucide-react';
 
 import { apiClient } from '@/lib/api';
 import AreaMapDrawer from '@/components/admin/AreaMapDrawer';
 import type { Map as LeafletMap } from 'leaflet';
 
+// ── Types & Schema ─────────────────────────────────────────────────────
 const CITIES = ['Rawalpindi', 'Islamabad', 'Lahore', 'Karachi'] as const;
 type City = typeof CITIES[number];
 
+const PAKISTAN_BOUNDS = {
+  lat: { min: 23.5, max: 37.5 },
+  lng: { min: 60.0, max: 78.0 },
+};
+
 const areaSchema = z.object({
-  name: z.string().min(2, 'Name must be at least 2 characters').max(50, 'Name too long'),
+  name: z.string().min(2, 'Area name is too short').max(50, 'Area name is too long'),
   city: z.enum(CITIES),
   center: z.object({
-    lat: z.number().min(23.5).max(37.5),
-    lng: z.number().min(60.5).max(78.0),
-  }),
-  polygon: z.object({
-    type: z.literal('Polygon'),
-    coordinates: z
-      .array(z.array(z.tuple([z.number(), z.number()])).min(4))
-      .min(1, 'At least one polygon ring required')
-      .refine(
-        (rings) =>
-          rings.every(
-            (ring) =>
-              ring.length >= 4 &&
-              ring[0][0] === ring[ring.length - 1][0] &&
-              ring[0][1] === ring[ring.length - 1][1]
-          ),
-        { message: 'Each ring must be closed (first and last point must match)' }
-      ),
+    lat: z.number().min(PAKISTAN_BOUNDS.lat.min).max(PAKISTAN_BOUNDS.lat.max),
+    lng: z.number().min(PAKISTAN_BOUNDS.lng.min).max(PAKISTAN_BOUNDS.lng.max),
   }),
 });
 
 type AreaFormValues = z.infer<typeof areaSchema>;
 
+interface DeliveryZonePayload {
+  feeStructure: 'flat' | 'distance';
+  deliveryFee?: number;
+  baseFee?: number;
+  distanceFeePerKm?: number;
+  maxDistanceKm?: number;
+  minOrderAmount: number;
+  estimatedTime: string;
+  freeDeliveryAbove?: number;
+  isActive: boolean;
+}
+
+// ── Component ──────────────────────────────────────────────────────────
 export default function AddArea() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
@@ -68,7 +69,17 @@ export default function AddArea() {
 
   const [center, setCenter] = useState({ lat: 33.5651, lng: 73.0169 });
   const [polygon, setPolygon] = useState<[number, number][][]>([]);
-  const [manualInput, setManualInput] = useState<string>('');
+  const [manualInput, setManualInput] = useState('');
+
+  // Delivery settings
+  const [feeStructure, setFeeStructure] = useState<'flat' | 'distance'>('flat');
+  const [flatFee, setFlatFee] = useState('149');
+  const [baseFee, setBaseFee] = useState('99');
+  const [feePerKm, setFeePerKm] = useState('25');
+  const [maxDistance, setMaxDistance] = useState('15');
+  const [minOrder, setMinOrder] = useState('0');
+  const [estimatedTime, setEstimatedTime] = useState('35-50 min');
+  const [freeDeliveryAbove, setFreeDeliveryAbove] = useState('0');
 
   const mapRef = useRef<LeafletMap | null>(null);
 
@@ -77,49 +88,50 @@ export default function AddArea() {
     defaultValues: {
       name: '',
       city: 'Rawalpindi',
-      center: { lat: 33.5651, lng: 73.0169 },
-      polygon: { type: 'Polygon', coordinates: [] },
+      center,
     },
   });
 
+  // ── Handlers ───────────────────────────────────────────────────────────
   const parseManualPoints = async () => {
     setManualLoading(true);
     try {
-      const lines = manualInput.trim().split('\n').filter((l) => l.trim());
-      if (lines.length < 3) throw new Error('At least 3 points are required to form a polygon');
+      const lines = manualInput.trim().split('\n').filter(Boolean);
+      if (lines.length < 3) throw new Error('Minimum 3 points required for a polygon');
 
       const points: [number, number][] = lines.map((line, i) => {
-        const parts = line.split(',').map((s) => s.trim());
-        if (parts.length !== 2) throw new Error(`Invalid format at line ${i + 1}: expected "lat, lng"`);
-
-        const lat = parseFloat(parts[0]);
-        const lng = parseFloat(parts[1]);
-
-        if (isNaN(lat) || isNaN(lng)) throw new Error(`Invalid coordinates at line ${i + 1}`);
-        if (lat < 23.5 || lat > 37.5 || lng < 60.5 || lng > 78.0) {
-          throw new Error(`Point at line ${i + 1} is outside Pakistan boundaries`);
+        const [latStr, lngStr] = line.split(',').map(s => s.trim());
+        const lat = parseFloat(latStr);
+        const lng = parseFloat(lngStr);
+        if (isNaN(lat) || isNaN(lng)) throw new Error(`Invalid number at line ${i + 1}`);
+        if (
+          lat < PAKISTAN_BOUNDS.lat.min ||
+          lat > PAKISTAN_BOUNDS.lat.max ||
+          lng < PAKISTAN_BOUNDS.lng.min ||
+          lng > PAKISTAN_BOUNDS.lng.max
+        ) {
+          throw new Error(`Coordinates at line ${i + 1} outside Pakistan bounds`);
         }
-
         return [lat, lng];
       });
 
+      // Close polygon if needed
       const first = points[0];
       const last = points[points.length - 1];
       if (first[0] !== last[0] || first[1] !== last[1]) {
         points.push(first);
       }
 
-      const newPolygon = [points];
-      setPolygon(newPolygon);
-      form.setValue('polygon', { type: 'Polygon', coordinates: newPolygon });
+      setPolygon([points]);
 
-      const avgLat = points.reduce((s, p) => s + p[0], 0) / points.length;
-      const avgLng = points.reduce((s, p) => s + p[1], 0) / points.length;
+      // Calculate center
+      const avgLat = points.reduce((sum, [lat]) => sum + lat, 0) / points.length;
+      const avgLng = points.reduce((sum, [, lng]) => sum + lng, 0) / points.length;
       const newCenter = { lat: avgLat, lng: avgLng };
       setCenter(newCenter);
       form.setValue('center', newCenter);
 
-      toast.success(`Loaded ${points.length - 1} points (auto-closed)`);
+      toast.success(`Successfully loaded ${points.length - 1} points`);
     } catch (err: any) {
       toast.error(err.message || 'Failed to parse coordinates');
     } finally {
@@ -129,78 +141,110 @@ export default function AddArea() {
 
   const onSubmit = async (data: AreaFormValues) => {
     if (polygon.length === 0 || polygon[0].length < 4) {
-      toast.error('Please define a valid delivery zone with at least 3 points');
+      toast.error('Please draw or paste a valid polygon (min 3 points + closing)');
       return;
     }
 
-    const payload = {
-      name: data.name.trim(),
-      city: data.city,
-      center: data.center,
-      polygon: {
-        type: 'Polygon',
-        coordinates: polygon,
-      },
-    };
+    setLoading(true);
 
     try {
-      setLoading(true);
-      await apiClient.post('/admin/area', payload);
-      toast.success(`Delivery area "${data.name}" created successfully!`);
+      const areaPayload = {
+        name: data.name.trim(),
+        city: data.city,
+        center: data.center,
+        mongoPolygon: {
+          type: 'Polygon',
+          coordinates: polygon.map(ring => ring.map(([lat, lng]) => [lng, lat])),
+        },
+      };
+
+      const areaRes = await apiClient.post('/admin/areas', areaPayload);
+      const createdArea = (areaRes as any).area;
+      if (!createdArea?._id) throw new Error('Area creation failed - no ID');
+
+      const zonePayload: DeliveryZonePayload = {
+        feeStructure,
+        minOrderAmount: Number(minOrder),
+        estimatedTime: estimatedTime.trim(),
+        isActive: true,
+        freeDeliveryAbove: Number(freeDeliveryAbove) || undefined,
+      };
+
+      if (feeStructure === 'flat') {
+        zonePayload.deliveryFee = Number(flatFee);
+      } else {
+        zonePayload.baseFee = Number(baseFee);
+        zonePayload.distanceFeePerKm = Number(feePerKm);
+        zonePayload.maxDistanceKm = Number(maxDistance);
+        zonePayload.deliveryFee = 0;
+      }
+
+      await apiClient.put(`/admin/areas/${createdArea._id}/delivery-zone`, zonePayload);
+
+      toast.success(`Area "${data.name}" and delivery zone created!`);
       navigate('/admin/areas');
     } catch (err: any) {
-      const msg = err?.response?.data?.message || 'Failed to create delivery area';
-      toast.error(msg);
+      const message = err?.response?.data?.message || 'Failed to create area/delivery zone';
+      toast.error(message);
+      console.error(err);
     } finally {
       setLoading(false);
     }
   };
 
+  // Resize map when switching tabs
   useEffect(() => {
     if (mode === 'draw' && mapRef.current) {
-      const timer = setTimeout(() => {
-        mapRef.current?.invalidateSize();
-      }, 200);
+      const timer = setTimeout(() => mapRef.current?.invalidateSize(), 200);
       return () => clearTimeout(timer);
     }
   }, [mode]);
 
-  const pointCount = polygon[0]?.length ? polygon[0].length - 1 : 0;
-  const isPolygonValid = polygon.length > 0 && polygon[0].length >= 4;
+  const pointCount = useMemo(() => (polygon[0]?.length ? polygon[0].length - 1 : 0), [polygon]);
+  const isPolygonValid = useMemo(() => polygon.length > 0 && polygon[0]?.length >= 4, [polygon]);
 
+  const previewFreeDelivery = useMemo(() => {
+    const free = Number(freeDeliveryAbove);
+    return free > 0 ? `Free delivery for orders ≥ Rs.${free}` : 'No free delivery threshold';
+  }, [freeDeliveryAbove]);
+
+  // ── Render ─────────────────────────────────────────────────────────────
   return (
-    <main className="min-h-screen bg-gradient-to-br from-emerald-50 via-green-50 to-teal-50 py-8 md:py-12">
-      <div className="container mx-auto px-4 max-w-7xl">
-        <Card className="shadow-2xl border-0 overflow-hidden">
-          <CardHeader className="bg-gradient-to-r from-green-600 to-emerald-700 text-white pb-10">
+    <main className="min-h-screen bg-gradient-to-b from-gray-50 to-white pb-16 pt-8 md:pt-12">
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-7xl">
+        <Card className="border shadow-xl bg-white overflow-hidden">
+          {/* Header */}
+          <CardHeader className="bg-gradient-to-r from-amber-700 to-amber-600 text-white pb-10 pt-8">
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6">
-              <MapPin className="w-12 h-12 md:w-16 md:h-16 flex-shrink-0" />
+              <div className="rounded-full bg-white/20 p-4">
+                <MapPin className="w-12 h-12 md:w-16 md:h-16" />
+              </div>
               <div>
-                <CardTitle className="text-3xl font-black md:text-4xl lg:text-5xl">
-                  Add New Delivery Area
+                <CardTitle className="text-3xl md:text-4xl font-extrabold tracking-tight">
+                  Create New Delivery Area
                 </CardTitle>
-                <p className="text-green-100 mt-3 text-base md:text-lg opacity-90">
-                  Draw on the map or paste coordinates to define your delivery zone
+                <p className="text-amber-100 mt-2 text-lg">
+                  Draw your zone and configure delivery pricing
                 </p>
               </div>
             </div>
           </CardHeader>
 
-          <CardContent className="pt-10 pb-12">
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-12">
-              {/* Area Name & City */}
+          <CardContent className="pt-10 pb-16 px-6 md:px-10">
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-14">
+              {/* 1. Basic Info */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                 <div className="space-y-3">
-                  <Label className="text-lg font-semibold flex items-center gap-2">
-                    Area Name <span className="text-red-500">*</span>
+                  <Label className="text-lg font-semibold text-gray-800">
+                    Area Name <span className="text-amber-700">*</span>
                   </Label>
                   <Input
-                    placeholder="e.g. Bahria Town Phase 7, Saddar"
-                    className="h-12 md:h-14 text-base md:text-lg"
+                    placeholder="e.g. Bahria Town Phase 8, Saddar"
+                    className="h-12 text-base"
                     {...form.register('name')}
                   />
                   {form.formState.errors.name && (
-                    <p className="text-sm text-destructive flex items-center gap-1">
+                    <p className="text-sm text-red-600 flex items-center gap-1.5 mt-1">
                       <AlertCircle className="h-4 w-4" />
                       {form.formState.errors.name.message}
                     </p>
@@ -208,17 +252,17 @@ export default function AddArea() {
                 </div>
 
                 <div className="space-y-3">
-                  <Label className="text-lg font-semibold">City</Label>
+                  <Label className="text-lg font-semibold text-gray-800">City</Label>
                   <Select
                     value={form.watch('city')}
-                    onValueChange={(v) => form.setValue('city', v as City)}
+                    onValueChange={v => form.setValue('city', v as City)}
                   >
-                    <SelectTrigger className="h-12 md:h-14 text-base md:text-lg">
+                    <SelectTrigger className="h-12">
                       <SelectValue placeholder="Select city" />
                     </SelectTrigger>
                     <SelectContent>
-                      {CITIES.map((city) => (
-                        <SelectItem key={city} value={city} className="py-3 text-base">
+                      {CITIES.map(city => (
+                        <SelectItem key={city} value={city}>
                           {city}
                         </SelectItem>
                       ))}
@@ -227,144 +271,244 @@ export default function AddArea() {
                 </div>
               </div>
 
-              {/* Polygon Definition */}
+              {/* 2. Polygon */}
               <div className="space-y-6">
-                <Label className="text-xl font-bold md:text-2xl">Delivery Zone Polygon</Label>
+                <div className="flex items-center gap-3">
+                  <div className="rounded-lg bg-amber-100 p-2">
+                    <MapPin className="h-8 w-8 text-amber-700" />
+                  </div>
+                  <h2 className="text-2xl font-bold text-gray-900">Delivery Zone Polygon</h2>
+                </div>
 
-                <Tabs value={mode} onValueChange={(v) => setMode(v as 'draw' | 'manual')}>
-                  <TabsList className="grid w-full grid-cols-2 h-12 md:h-14">
-                    <TabsTrigger value="draw" className="text-base md:text-lg font-medium">
-                      Draw on Map
-                    </TabsTrigger>
-                    <TabsTrigger value="manual" className="text-base md:text-lg font-medium">
-                      Paste Coordinates
-                    </TabsTrigger>
+                <Tabs value={mode} onValueChange={v => setMode(v as 'draw' | 'manual')} className="space-y-6">
+                  <TabsList className="grid w-full max-w-md grid-cols-2">
+                    <TabsTrigger value="draw">Draw on Map</TabsTrigger>
+                    <TabsTrigger value="manual">Paste Coordinates</TabsTrigger>
                   </TabsList>
 
-                  <TabsContent value="draw" className="mt-6">
-                    <div className="border-4 border-emerald-200 rounded-2xl overflow-hidden shadow-2xl bg-gray-50">
+                  <TabsContent value="draw" className="mt-2">
+                    <div className="rounded-xl border-2 border-amber-200 overflow-hidden shadow-lg bg-gray-50 aspect-[4/3] md:aspect-[3/2]">
                       <AreaMapDrawer
                         ref={mapRef}
                         center={center}
                         polygon={polygon}
-                        onCenterChange={(c) => {
+                        onCenterChange={c => {
                           setCenter(c);
                           form.setValue('center', c);
                         }}
-                        onPolygonChange={(p) => {
-                          setPolygon(p);
-                          form.setValue('polygon', { type: 'Polygon', coordinates: p });
-                        }}
+                        onPolygonChange={setPolygon}
                       />
                     </div>
                   </TabsContent>
 
-                  <TabsContent value="manual" className="mt-6 space-y-6">
-                    <div className="bg-amber-50 border-2 border-amber-300 rounded-2xl p-6 md:p-8">
-                      <h4 className="font-bold text-amber-900 mb-4 text-lg md:text-xl">Coordinate Format</h4>
-                      <p className="text-amber-800 mb-6 text-base">
-                        Enter one coordinate per line:{' '}
-                        <code className="bg-amber-200 px-3 py-1 rounded font-mono">latitude, longitude</code>
-                      </p>
-                      <pre className="bg-amber-100 p-6 rounded-xl font-mono text-sm overflow-x-auto border border-amber-300">
-{`33.565100, 73.016900
-33.575000, 73.026900
-33.575000, 73.006900
-33.565100, 73.016900   ← auto-closed`}
+                  <TabsContent value="manual" className="mt-2 space-y-6">
+                    <div className="bg-amber-50/50 border border-amber-200 rounded-xl p-6">
+                      <h4 className="font-semibold text-amber-800 mb-3">Expected format:</h4>
+                      <pre className="bg-white p-4 rounded-lg font-mono text-sm text-gray-700 overflow-x-auto">
+                        33.565100, 73.016900<br />
+                        33.575000, 73.026900<br />
+                        33.575000, 73.006900<br />
+                        33.565100, 73.016900 ← auto-closes
                       </pre>
-                      <p className="text-sm text-amber-700 mt-4">
-                        The polygon will be automatically closed. All points must be within Pakistan.
-                      </p>
                     </div>
 
                     <Textarea
-                      placeholder="Paste your coordinates here, one per line..."
+                      placeholder="Paste coordinates here (one per line)..."
                       value={manualInput}
-                      onChange={(e) => setManualInput(e.target.value)}
-                      className="h-64 md:h-80 font-mono text-sm resize-none border-2"
+                      onChange={e => setManualInput(e.target.value)}
+                      className="min-h-[220px] font-mono text-sm"
+                      spellCheck={false}
                     />
 
                     <Button
                       type="button"
                       onClick={parseManualPoints}
                       disabled={manualLoading || !manualInput.trim()}
-                      size="lg"
-                      className="w-full h-12 md:h-14 text-base md:text-lg font-semibold"
+                      className="w-full md:w-auto bg-amber-600 hover:bg-amber-700"
                     >
                       {manualLoading ? (
                         <>
-                          <Loader2 className="mr-2 h-6 w-6 animate-spin" />
-                          Loading Coordinates...
+                          <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                          Processing...
                         </>
                       ) : (
-                        'Load & Preview on Map'
+                        'Load & Preview'
                       )}
                     </Button>
                   </TabsContent>
                 </Tabs>
               </div>
 
-              {/* Live Status Summary */}
-              <div className="bg-gradient-to-r from-emerald-50 to-green-50 rounded-2xl p-6 md:p-8 border-2 border-emerald-200">
-                <h3 className="font-bold text-xl md:text-2xl mb-6 flex items-center gap-3">
-                  <MapPin className="w-7 md:w-8 md:h-8 text-emerald-600" />
-                  Current Zone Status
-                </h3>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  <div className="bg-white rounded-xl p-5 shadow-md">
-                    <p className="text-gray-600 font-medium">Delivery Center</p>
-                    <p className="font-mono text-base md:text-lg mt-2 break-all">
-                      {center.lat.toFixed(6)}, {center.lng.toFixed(6)}
-                    </p>
+              {/* 3. Delivery Settings */}
+              <div className="rounded-2xl border bg-white p-8 shadow-sm">
+                <div className="flex items-center gap-3 mb-8">
+                  <div className="rounded-lg bg-amber-100 p-2">
+                    <Truck className="h-8 w-8 text-amber-700" />
                   </div>
+                  <h2 className="text-2xl font-bold text-gray-900">Delivery Settings</h2>
+                </div>
 
-                  <div className="bg-white rounded-xl p-5 shadow-md">
-                    <p className="text-gray-600 font-medium">Polygon Points</p>
-                    <p className="text-3xl font-black mt-2 text-emerald-600">{pointCount}</p>
-                  </div>
+                <div className="space-y-10">
+                  {/* Pricing model + values */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div>
+                      <Label className="text-base font-medium text-gray-800">Pricing Model</Label>
+                      <Select value={feeStructure} onValueChange={v => setFeeStructure(v as 'flat' | 'distance')}>
+                        <SelectTrigger className="mt-2 h-11">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="flat">Flat Fee</SelectItem>
+                          <SelectItem value="distance">Distance-Based</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
 
-                  <div className="bg-white rounded-xl p-5 shadow-md flex items-center justify-center">
-                    {isPolygonValid ? (
-                      <Badge className="text-lg md:text-xl px-8 py-4 bg-green-600 hover:bg-green-700">
-                        Ready to Save
-                      </Badge>
+                    {feeStructure === 'flat' ? (
+                      <div>
+                        <Label className="text-base font-medium text-gray-800">Flat Delivery Fee (Rs.)</Label>
+                        <Input
+                          type="number"
+                          value={flatFee}
+                          onChange={e => setFlatFee(e.target.value)}
+                          min={0}
+                          className="mt-2 h-11"
+                        />
+                      </div>
                     ) : (
-                      <Badge variant="destructive" className="text-lg md:text-xl px-8 py-4">
-                        {pointCount === 0 ? 'Draw Polygon First' : 'Need More Points'}
-                      </Badge>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+                        <div>
+                          <Label className="text-base font-medium text-gray-800">Base Fee</Label>
+                          <Input
+                            type="number"
+                            value={baseFee}
+                            onChange={e => setBaseFee(e.target.value)}
+                            min={0}
+                            className="mt-2 h-11"
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-base font-medium text-gray-800">Fee / km</Label>
+                          <Input
+                            type="number"
+                            value={feePerKm}
+                            onChange={e => setFeePerKm(e.target.value)}
+                            min={0}
+                            className="mt-2 h-11"
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-base font-medium text-gray-800">Max Distance (km)</Label>
+                          <Input
+                            type="number"
+                            value={maxDistance}
+                            onChange={e => setMaxDistance(e.target.value)}
+                            min={1}
+                            className="mt-2 h-11"
+                          />
+                        </div>
+                      </div>
                     )}
+                  </div>
+
+                  {/* Additional rules */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                    <div>
+                      <Label className="text-base font-medium text-gray-800">Min. Order Amount (Rs.)</Label>
+                      <Input
+                        type="number"
+                        value={minOrder}
+                        onChange={e => setMinOrder(e.target.value)}
+                        min={0}
+                        className="mt-2 h-11"
+                      />
+                    </div>
+
+                    <div>
+                      <Label className="text-base font-medium text-gray-800">Estimated Time</Label>
+                      <Input
+                        value={estimatedTime}
+                        onChange={e => setEstimatedTime(e.target.value)}
+                        placeholder="35-50 min"
+                        className="mt-2 h-11"
+                      />
+                    </div>
+
+                    <div>
+                      <Label className="text-base font-medium text-gray-800">Free Above (Rs.)</Label>
+                      <Input
+                        type="number"
+                        value={freeDeliveryAbove}
+                        onChange={e => setFreeDeliveryAbove(e.target.value)}
+                        min={0}
+                        className="mt-2 h-11"
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
 
-              {/* Submit Actions */}
-              <div className="flex flex-col sm:flex-row justify-end gap-4 pt-8 border-t-2 border-gray-200">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="lg"
-                  className="w-full sm:w-auto h-12 md:h-14 text-base md:text-lg"
-                  onClick={() => navigate('/admin/areas')}
-                >
-                  Cancel
-                </Button>
+              {/* Summary & Actions */}
+              <div className="space-y-8">
+                {/* Summary Card */}
+                <div className="bg-gray-50/70 border rounded-xl p-6">
+                  <h3 className="font-bold text-xl text-gray-800 mb-5">Zone Summary</h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 text-sm">
+                    <div>
+                      <p className="text-gray-600">Center</p>
+                      <p className="font-mono mt-1 text-gray-800">
+                        {center.lat.toFixed(6)}, {center.lng.toFixed(6)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-gray-600">Points</p>
+                      <p className="text-2xl font-bold text-amber-700 mt-1">{pointCount}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-600">Polygon</p>
+                      {isPolygonValid ? (
+                        <Badge className="mt-1 text-base bg-amber-600 hover:bg-amber-600">
+                          Ready
+                        </Badge>
+                      ) : (
+                        <Badge variant="secondary" className="mt-1 text-base">
+                          Not ready
+                        </Badge>
+                      )}
+                    </div>
+                    <div>
+                      <p className="text-gray-600">Free Delivery</p>
+                      <p className="font-medium mt-1 text-gray-800">{previewFreeDelivery}</p>
+                    </div>
+                  </div>
+                </div>
 
-                <Button
-                  type="submit"
-                  size="lg"
-                  disabled={loading || !isPolygonValid}
-                  className="w-full sm:w-auto h-12 md:h-14 text-base md:text-lg font-bold bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 shadow-xl"
-                >
-                  {loading ? (
-                    <>
-                      <Loader2 className="mr-3 h-6 w-6 animate-spin" />
-                      Creating Area...
-                    </>
-                  ) : (
-                    'Create Delivery Area'
-                  )}
-                </Button>
+                {/* Buttons */}
+                <div className="flex flex-col sm:flex-row gap-4 justify-end pt-6">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="lg"
+                    onClick={() => navigate('/admin/areas')}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="submit"
+                    size="lg"
+                    disabled={loading || !isPolygonValid}
+                    className="bg-amber-700 hover:bg-amber-800 min-w-[240px]"
+                  >
+                    {loading ? (
+                      <>
+                        <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                        Creating...
+                      </>
+                    ) : (
+                      'Create Area + Delivery Zone'
+                    )}
+                  </Button>
+                </div>
               </div>
             </form>
           </CardContent>
