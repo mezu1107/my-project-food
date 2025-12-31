@@ -51,6 +51,7 @@ import OrderRefundRequestPage from "@/features/orders/pages/OrderRefundRequestPa
 // Address
 import AddressListPage from "@/features/address/pages/AddressListPage";
 
+
 // Admin
 
 // import AdminDashboard from "./pages/admin/Dashboard";
@@ -63,6 +64,8 @@ import AdminMenuPage from "./features/menu/pages/AdminMenuPage";
 import EditMenuItemPage from "@/features/menu/pages/EditMenuItemPage";
 import AdminAreasList from "./pages/admin/areas/AreasList";
 import AdminAddArea from "./pages/admin/areas/AddArea";
+import AddDeliveryZone from "./pages/admin/areas/AddDeliveryZone";
+
 import AdminEditArea from "./pages/admin/areas/EditArea";
 import ContactMessagesPage from "./pages/admin/contact/ContactMessagesPage";
 import { CustomerList } from "./features/customers/admin/customers/CustomerList";
@@ -120,6 +123,7 @@ export default function App() {
                 <Route path="/menu/all" element={<MenuAllPage />} />
                 <Route path="/menu/filters" element={<MenuFiltersPage />} />
                 <Route path="/menu/area/:areaId" element={<MenuByLocationPage />} />
+                
 
                 <Route path="/cart" element={<CartPage />} />
                 <Route path="/checkout" element={<CheckoutPage />} />
@@ -161,6 +165,7 @@ export default function App() {
   <Route path="menu/edit/:id" element={<EditMenuItemPage />} />
   <Route path="areas" element={<AdminAreasList />} />
   <Route path="areas/add" element={<AdminAddArea />} />
+  <Route path="/admin/delivery-zones" element={<AddDeliveryZone />} />
   <Route path="areas/edit/:id" element={<AdminEditArea />} />
   <Route path="orders" element={<AdminOrders />} />
   <Route path="orders/:orderId" element={<AdminOrderDetails />} />

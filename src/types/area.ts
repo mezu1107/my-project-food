@@ -11,7 +11,19 @@ export interface LatLng {
   lat: number;
   lng: number;
 }
-
+// Add near the other response interfaces
+export interface ToggleDeliveryZoneResponse {
+  success: boolean;
+  message: string;
+  deliveryZone: DeliveryZone;
+  hasDeliveryZone: boolean;
+  area: {
+    _id: string;
+    name: string;
+    city: string;
+    isActive: boolean;
+  };
+}
 /** MongoDB GeoJSON Point (stored format) */
 export interface GeoJSONPoint {
   type: 'Point';
