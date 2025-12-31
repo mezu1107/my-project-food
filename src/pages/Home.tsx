@@ -42,12 +42,11 @@ export const Home = ({ openAreaChecker }: HomeProps = {}) => {
   }, []);
 
   const categories = [
-    { name: "Breakfast", icon: "Paratha", link: "/menu?category=breakfast" },
-    { name: "Lunch", icon: "Dish", link: "/menu?category=lunch" },
-    { name: "Dinner", icon: "Moon", link: "/menu?category=dinner" },
-    { name: "Snacks", icon: "Popcorn", link: "/menu?category=snacks" },
-    { name: "Desserts", icon: "Ice Cream", link: "/menu?category=desserts" },
-    { name: "Beverages", icon: "Coffee", link: "/menu?category=beverages" },
+    { name: "Breakfast", icon: "🍳", link: "/menu?category=breakfast" },
+    { name: "Lunch", icon: "🍛", link: "/menu?category=lunch" },
+    { name: "Dinner", icon: "🍲", link: "/menu?category=dinner" },
+    { name: "Desserts", icon: "🍰", link: "/menu?category=desserts" },
+    { name: "Beverages", icon: "🥤", link: "/menu?category=beverages" },
   ];
 
   const testimonials = [
@@ -179,7 +178,7 @@ export const Home = ({ openAreaChecker }: HomeProps = {}) => {
           </p>
         </motion.div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-6">
+<div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-6 place-items-center">
           {categories.map((category, index) => (
             <motion.div
               key={category.name}
