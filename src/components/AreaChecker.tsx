@@ -53,24 +53,37 @@ export default function AreaChecker({
   const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
 
   // Load Google Places
-  useEffect(() => {
-    if (!isGooglePlacesEnabled || googleLoaded || googleError) return;
+useEffect(() => {
+  if (!googleLoaded || !inputRef.current) return;
 
-    if (document.querySelector('script[src*="maps.googleapis.com/maps/api/js"]')) {
-      setGoogleLoaded(true);
-      return;
+  if (!window.google) {
+    setGoogleError(true);
+    toast.error('Google Maps not loaded yet');
+    return;
+  }
+
+  const autocomplete = new window.google.maps.places.Autocomplete(inputRef.current, {
+    types: ['geocode'],
+    componentRestrictions: { country: 'pk' },
+    fields: ['formatted_address', 'geometry.location'],
+  });
+
+  autocomplete.addListener('place_changed', () => {
+    const place = autocomplete.getPlace();
+    if (place.geometry?.location) {
+      setSearchCoords({
+        lat: place.geometry.location.lat(),
+        lng: place.geometry.location.lng(),
+      });
+      toast.success('Location selected');
+    } else {
+      toast.error('Invalid location');
     }
+  });
 
-    const script = document.createElement('script');
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_API_KEY}&libraries=places`;
-    script.async = true;
-    script.onload = () => setGoogleLoaded(true);
-    script.onerror = () => {
-      setGoogleError(true);
-      toast.error('Failed to load location search');
-    };
-    document.head.appendChild(script);
-  }, [googleLoaded, googleError]);
+  autocompleteRef.current = autocomplete;
+}, [googleLoaded]);
+
 
   // Initialize Autocomplete
   useEffect(() => {

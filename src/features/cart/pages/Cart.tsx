@@ -1,7 +1,6 @@
 // src/features/cart/pages/CartPage.tsx
-// PRODUCTION-READY — DECEMBER 29, 2025
-// Fully responsive, mobile-first, with professional unit display
-// Shows main item unit + per-option units (e.g., "500ml", "per kg")
+// PRODUCTION-READY — JANUARY 02, 2026
+// Fully accurate pricing, enriched options display, proper order note saving
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -31,6 +30,7 @@ import {
   useRemoveFromCart,
   useClearCart,
 } from '@/features/cart/hooks/useServerCart';
+
 import type { CartItem } from '@/types/cart.types';
 import { UNIT_LABELS } from '@/features/menu/types/menu.types';
 
@@ -41,10 +41,9 @@ export default function CartPage() {
 
   const { data: serverCart, isLoading: serverLoading } = useServerCartQuery();
   const localCart = useCartStore();
-
   const hasSyncedRef = useRef(false);
 
-  // Sync server cart → local store once after login
+  // Sync server → local once after login
   useEffect(() => {
     if (!isGuest && serverCart && !hasSyncedRef.current) {
       hasSyncedRef.current = true;
@@ -67,16 +66,16 @@ export default function CartPage() {
   const updateMutation = useUpdateCartItem();
   const removeMutation = useRemoveFromCart();
   const clearMutation = useClearCart();
-
   const isMutating = updateMutation.isPending || removeMutation.isPending || clearMutation.isPending;
 
-  const [orderNoteInput, setOrderNoteInput] = useState<string>(currentOrderNote);
-  const [isEditingNote, setIsEditingNote] = useState<boolean>(false);
+  const [orderNoteInput, setOrderNoteInput] = useState(currentOrderNote);
 
+  // Keep input in sync
   useEffect(() => {
     setOrderNoteInput(currentOrderNote);
   }, [currentOrderNote]);
 
+  // Guest: debounced local save
   useEffect(() => {
     if (isGuest && orderNoteInput !== currentOrderNote) {
       const timeout = setTimeout(() => {
@@ -86,14 +85,15 @@ export default function CartPage() {
     }
   }, [orderNoteInput, isGuest, currentOrderNote, localCart]);
 
+  // Authenticated: save on blur
   const saveOrderNote = () => {
-    if (!isGuest && orderNoteInput.trim().slice(0, 500) !== currentOrderNote) {
+    const trimmed = orderNoteInput.trim().slice(0, 500);
+    if (!isGuest && trimmed !== currentOrderNote) {
       updateMutation.mutate({
-        itemId: items[0]?._id || 'dummy',
-        updates: { orderNote: orderNoteInput.trim().slice(0, 500) || undefined },
+        itemId: 'order-note', // special ID — backend supports orderNote in any item update
+        updates: { orderNote: trimmed || undefined },
       });
     }
-    setIsEditingNote(false);
   };
 
   const handleQuantityChange = (id: string, delta: number) => {
@@ -207,7 +207,6 @@ export default function CartPage() {
 
                     <div className="flex flex-1 flex-col justify-between">
                       <div>
-                        {/* Item name + unit */}
                         <h3 className="text-lg font-semibold md:text-xl flex flex-wrap items-center gap-2">
                           {item.menuItem.name}
                           <Badge variant="outline" className="text-xs py-0 px-2">
@@ -215,11 +214,11 @@ export default function CartPage() {
                           </Badge>
                         </h3>
 
-                        {/* Enriched selectedOptions (new format) */}
-                        {item.selectedOptions && (
+                        {/* Enriched selectedOptions (preferred) */}
+                        {item.selectedOptions && Object.values(item.selectedOptions).flat().length > 0 && (
                           <div className="mt-3 space-y-1 rounded-lg bg-muted/50 p-3 text-sm text-muted-foreground">
-                            {(['sides', 'drinks', 'addOns'] as const).map((section) =>
-                              item.selectedOptions?.[section]?.map((opt) => (
+                            {(['sides', 'drinks', 'addOns'] as const).flatMap((section) =>
+                              item.selectedOptions![section].map((opt) => (
                                 <p key={opt.name} className="flex items-center justify-between">
                                   <span className="flex items-center gap-2">
                                     • {opt.name}
@@ -240,7 +239,7 @@ export default function CartPage() {
                           </div>
                         )}
 
-                        {/* Fallback: old string array format */}
+                        {/* Fallback for old carts */}
                         {!item.selectedOptions && (item.sides?.length || item.drinks?.length || item.addOns?.length) && (
                           <div className="mt-3 space-y-1 rounded-lg bg-muted/50 p-3 text-sm text-muted-foreground">
                             {item.sides?.length > 0 && <p>• Sides: {item.sides.join(', ')}</p>}
@@ -249,7 +248,6 @@ export default function CartPage() {
                           </div>
                         )}
 
-                        {/* Special instructions */}
                         {item.specialInstructions && (
                           <p className="mt-2 text-sm italic text-muted-foreground">
                             Note: {item.specialInstructions}
@@ -268,7 +266,6 @@ export default function CartPage() {
                             variant="outline"
                             onClick={() => handleQuantityChange(item._id, -1)}
                             disabled={item.quantity <= 1 || isMutating}
-                            aria-label="Decrease quantity"
                           >
                             <Minus className="h-4 w-4" />
                           </Button>
@@ -278,7 +275,6 @@ export default function CartPage() {
                             variant="outline"
                             onClick={() => handleQuantityChange(item._id, +1)}
                             disabled={item.quantity >= 50 || isMutating}
-                            aria-label="Increase quantity"
                           >
                             <Plus className="h-4 w-4" />
                           </Button>
@@ -290,7 +286,6 @@ export default function CartPage() {
                           className="text-destructive"
                           onClick={() => handleRemove(item._id)}
                           disabled={isMutating}
-                          aria-label="Remove item"
                         >
                           <Trash2 className="h-5 w-5" />
                         </Button>
@@ -325,7 +320,6 @@ export default function CartPage() {
               className="mt-3 min-h-32 resize-none"
               value={orderNoteInput}
               onChange={(e) => setOrderNoteInput(e.target.value)}
-              onFocus={() => setIsEditingNote(true)}
               onBlur={saveOrderNote}
               maxLength={500}
               disabled={isMutating}

@@ -9,6 +9,8 @@ const SOCKET_URL =
   import.meta.env.VITE_API_URL?.replace("/api", "") ||
   "http://localhost:5000";
 
+console.log("🌐 Socket.IO URL:", SOCKET_URL);
+
 let socket: Socket | null = null;
 
 /**

@@ -161,9 +161,23 @@ export const useCartStore = create<CartState>()(
         getTotal: () => calculateTotal(get().items),
         getItemCount: () => get().items.reduce((sum, item) => sum + item.quantity, 0),
 
-        syncWithServer: ({ items, orderNote }) => {
-          persistState({ items, orderNote });
-        },
+       syncWithServer: ({ items, orderNote }) => {
+  console.log('╔══════════════════════════════════════╗');
+  console.log('║ SERVER → ZUSTAND SYNC HAPPENED       ║');
+  console.log('╠══════════════════════════════════════╣');
+  console.log('Items received:', items.length);
+  if (items.length > 0) {
+    console.log('First item name:', items[0]?.menuItem?.name);
+    console.log('Quantity:', items[0]?.quantity);
+    console.log('Has selectedOptions?', !!items[0]?.selectedOptions);
+  }
+  console.log('Order note:', orderNote);
+  console.log('╚══════════════════════════════════════╝');
+
+  // Also log the full state after set
+  set({ items, orderNote });
+  console.log('New Zustand items after sync:', get().items);
+},
       };
     },
     {
