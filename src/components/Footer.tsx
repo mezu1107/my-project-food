@@ -180,7 +180,7 @@ export const Footer: React.FC = () => {
             <ul className="space-y-3">
               <li className="flex items-start gap-3 text-sm text-muted-foreground">
                 <Phone className="h-4 w-4 mt-0.5 flex-shrink-0" />
-                <span>+92 370 9447916</span>
+                <span>+92 332 0123459</span>
               </li>
 
               <li className="flex items-start gap-3 text-sm text-muted-foreground">

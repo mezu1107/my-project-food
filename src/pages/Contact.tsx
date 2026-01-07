@@ -24,9 +24,9 @@ const contactInfo = [
   },
   {
     title: "Call Us",
-    content: "+92 370 944 7916",
+    content: "+92 332 0123459",
     icon: Phone,
-    link: "tel:+923709447916",
+    link: "tel:+923320123459",
   },
   {
     title: "Working Hours",
