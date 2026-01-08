@@ -1,6 +1,6 @@
 // src/pages/Register.tsx
 // PRODUCTION-READY — FULLY RESPONSIVE (320px → 4K)
-// Mobile-first registration page with fluid layout, touch-friendly inputs
+// Now uses useAuthValidation hook for exact backend-matched client-side validation
 
 import { useState } from "react";
 import { Link } from "react-router-dom";
@@ -10,12 +10,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { User, Phone, Mail, Lock, Eye, EyeOff } from "lucide-react";
-import { toast } from "sonner";
 
 import { useRegister } from "@/features/auth/hooks/useRegister";
+import { useAuthValidation } from "@/features/auth/hooks/useAuthValidation";
 
 export default function Register() {
   const registerMutation = useRegister();
+  const { errors, validate, clearErrors } = useAuthValidation("register");
 
   const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState({
@@ -25,20 +26,29 @@ export default function Register() {
     password: "",
   });
 
+  const handleChange = (field: keyof typeof formData) => (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    setFormData((prev) => ({ ...prev, [field]: e.target.value }));
+    // Clear error for this field on change
+    if (errors[field]) {
+      clearErrors();
+    }
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    clearErrors();
 
-    if (!formData.name.trim()) {
-      toast.error("Full name is required");
-      return;
-    }
-    if (!formData.phone.trim()) {
-      toast.error("Phone number is required");
-      return;
-    }
-    if (formData.password.length < 8) {
-      toast.error("Password must be at least 8 characters");
-      return;
+    const isValid = validate({
+      name: formData.name.trim(),
+      phone: formData.phone.trim(),
+      email: formData.email.trim() || undefined,
+      password: formData.password,
+    });
+
+    if (!isValid) {
+      return; // Validation failed — errors are now in `errors` state
     }
 
     registerMutation.mutate({
@@ -89,7 +99,7 @@ export default function Register() {
           <CardContent className="pt-8 pb-10 px-6 md:px-10">
             <form onSubmit={handleSubmit} className="space-y-6">
               {/* Name Field */}
-              <div className="space-y-3">
+              <div className="space-y-2">
                 <Label htmlFor="name" className="text-base font-medium">
                   Full Name
                 </Label>
@@ -99,17 +109,23 @@ export default function Register() {
                     id="name"
                     type="text"
                     placeholder="Ahmed Khan"
-                    className="pl-12 h-12 md:h-14 text-base md:text-lg border-2 border-orange-200 focus:border-orange-500 transition-all"
+                    className={`pl-12 h-12 md:h-14 text-base md:text-lg border-2 transition-all ${
+                      errors.name
+                        ? "border-red-500 focus:border-red-600"
+                        : "border-orange-200 focus:border-orange-500"
+                    }`}
                     value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    onChange={handleChange("name")}
                     disabled={registerMutation.isPending}
-                    required
                   />
                 </div>
+                {errors.name && (
+                  <p className="text-sm text-red-600 font-medium">{errors.name}</p>
+                )}
               </div>
 
               {/* Phone Field */}
-              <div className="space-y-3">
+              <div className="space-y-2">
                 <Label htmlFor="phone" className="text-base font-medium">
                   Phone Number
                 </Label>
@@ -119,19 +135,26 @@ export default function Register() {
                     id="phone"
                     type="tel"
                     placeholder="03123456789"
-                    className="pl-12 h-12 md:h-14 text-base md:text-lg border-2 border-orange-200 focus:border-orange-500 transition-all"
+                    className={`pl-12 h-12 md:h-14 text-base md:text-lg border-2 transition-all ${
+                      errors.phone
+                        ? "border-red-500 focus:border-red-600"
+                        : "border-orange-200 focus:border-orange-500"
+                    }`}
                     value={formData.phone}
-                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                    onChange={handleChange("phone")}
                     disabled={registerMutation.isPending}
-                    required
                   />
                 </div>
+                {errors.phone && (
+                  <p className="text-sm text-red-600 font-medium">{errors.phone}</p>
+                )}
               </div>
 
               {/* Email Field */}
-              <div className="space-y-3">
+              <div className="space-y-2">
                 <Label htmlFor="email" className="text-base font-medium">
-                  Email Address <span className="text-muted-foreground font-normal">(Optional)</span>
+                  Email Address{" "}
+                  <span className="text-muted-foreground font-normal">(Optional)</span>
                 </Label>
                 <div className="relative">
                   <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-orange-600" />
@@ -139,16 +162,23 @@ export default function Register() {
                     id="email"
                     type="email"
                     placeholder="ahmed@example.com"
-                    className="pl-12 h-12 md:h-14 text-base md:text-lg border-2 border-orange-200 focus:border-orange-500 transition-all"
+                    className={`pl-12 h-12 md:h-14 text-base md:text-lg border-2 transition-all ${
+                      errors.email
+                        ? "border-red-500 focus:border-red-600"
+                        : "border-orange-200 focus:border-orange-500"
+                    }`}
                     value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    onChange={handleChange("email")}
                     disabled={registerMutation.isPending}
                   />
                 </div>
+                {errors.email && (
+                  <p className="text-sm text-red-600 font-medium">{errors.email}</p>
+                )}
               </div>
 
               {/* Password Field */}
-              <div className="space-y-3">
+              <div className="space-y-2">
                 <Label htmlFor="password" className="text-base font-medium">
                   Password
                 </Label>
@@ -158,11 +188,14 @@ export default function Register() {
                     id="password"
                     type={showPassword ? "text" : "password"}
                     placeholder="••••••••"
-                    className="pl-12 pr-14 h-12 md:h-14 text-base md:text-lg border-2 border-orange-200 focus:border-orange-500 transition-all"
+                    className={`pl-12 pr-14 h-12 md:h-14 text-base md:text-lg border-2 transition-all ${
+                      errors.password
+                        ? "border-red-500 focus:border-red-600"
+                        : "border-orange-200 focus:border-orange-500"
+                    }`}
                     value={formData.password}
-                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                    onChange={handleChange("password")}
                     disabled={registerMutation.isPending}
-                    required
                   />
                   <button
                     type="button"
@@ -173,6 +206,9 @@ export default function Register() {
                     {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                   </button>
                 </div>
+                {errors.password && (
+                  <p className="text-sm text-red-600 font-medium">{errors.password}</p>
+                )}
               </div>
 
               {/* Submit Button */}
@@ -202,9 +238,9 @@ export default function Register() {
         </Card>
 
         {/* Footer Note */}
-         <p className="text-center text-sm text-muted-foreground mt-8">
-    © {new Date().getFullYear()} AM Enterprises Pakistan • Authentic Pakistani Cuisine Delivered
-  </p>
+        <p className="text-center text-sm text-muted-foreground mt-8">
+          © {new Date().getFullYear()} AM Enterprises Pakistan • Authentic Pakistani Cuisine Delivered
+        </p>
       </motion.div>
     </main>
   );

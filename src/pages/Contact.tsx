@@ -1,5 +1,5 @@
 // src/pages/Contact.tsx
-// PRODUCTION-READY — Modern, responsive contact page with warm Pakistani-inspired branding
+// PRODUCTION-READY — Now uses centralized useContactValidation hook
 
 import { useState } from "react";
 import { motion } from "framer-motion";
@@ -7,14 +7,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { toast } from "sonner";
 import { Mail, Phone, MapPin, Clock, Send, MessageCircle } from "lucide-react";
-
 import { Footer } from "@/components/Footer";
+import { toast } from "sonner";
+
+import { useContactValidation } from "@/hooks/useContactValidation";
 
 const API_URL = import.meta.env.VITE_API_URL;
 
-// Updated contact info with enhanced styling
 const contactInfo = [
   {
     title: "Email Us",
@@ -40,11 +40,6 @@ const contactInfo = [
   },
 ];
 
-const validateEmail = (email: string) => /^\S+@\S+\.\S+$/.test(email);
-const validateName = (name: string) => /^[\p{L}\s'-]{2,50}$/u.test(name.trim());
-const validateSubject = (subject: string) => subject.trim().length >= 3 && subject.length <= 100;
-const validateMessage = (message: string) => message.trim().length >= 10 && message.length <= 2000;
-
 export default function Contact() {
   const [formData, setFormData] = useState({
     name: "",
@@ -54,33 +49,41 @@ export default function Contact() {
   });
   const [loading, setLoading] = useState(false);
 
-  const handleChange = (field: keyof typeof formData) => (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
-  ) => {
+  const { errors, validate, clearErrors } = useContactValidation();
+
+  const handleChange = (
+    field: keyof typeof formData
+  ) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setFormData((prev) => ({ ...prev, [field]: e.target.value }));
+    // Clear error for this field as user types
+    if (errors[field]) {
+      clearErrors();
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    clearErrors();
 
-    const { name, email, subject, message } = formData;
+    const isValid = validate({
+      name: formData.name,
+      email: formData.email,
+      subject: formData.subject,
+      message: formData.message,
+    });
 
-    if (!validateName(name)) return toast.error("Please enter a valid name (2–50 letters).");
-    if (!validateEmail(email)) return toast.error("Please enter a valid email address.");
-    if (!validateSubject(subject)) return toast.error("Subject must be 3–100 characters.");
-    if (!validateMessage(message)) return toast.error("Message must be 10–2000 characters.");
+    if (!isValid) return; // Errors are now in `errors` state
 
+    setLoading(true);
     try {
-      setLoading(true);
-
       const res = await fetch(`${API_URL}/contact/submit`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: name.trim(),
-          email: email.trim().toLowerCase(),
-          subject: subject.trim(),
-          message: message.trim(),
+          name: formData.name.trim(),
+          email: formData.email.trim().toLowerCase(),
+          subject: formData.subject.trim(),
+          message: formData.message.trim(),
         }),
       });
 
@@ -89,6 +92,7 @@ export default function Contact() {
       if (res.ok) {
         toast.success(data.message || "Thank you! Your message has been sent.");
         setFormData({ name: "", email: "", subject: "", message: "" });
+        clearErrors();
       } else {
         toast.error(data.message || "Failed to send message. Please try again.");
       }
@@ -165,9 +169,8 @@ export default function Contact() {
             <h2 className="text-4xl md:text-5xl font-extrabold text-gray-900 mb-10">
               Send us a Message
             </h2>
-
             <form onSubmit={handleSubmit} className="space-y-7">
-              <div className="space-y-3">
+              <div className="space-y-2">
                 <Label htmlFor="name" className="text-base font-medium">Your Name</Label>
                 <Input
                   id="name"
@@ -175,11 +178,16 @@ export default function Contact() {
                   onChange={handleChange("name")}
                   placeholder="Ahmed Khan"
                   disabled={loading}
-                  className="h-12 md:h-14 text-base rounded-xl border-orange-200 focus:border-orange-500"
+                  className={`h-12 md:h-14 text-base rounded-xl border-2 transition-all ${
+                    errors.name
+                      ? "border-red-500 focus:border-red-600"
+                      : "border-orange-200 focus:border-orange-500"
+                  }`}
                 />
+                {errors.name && <p className="text-sm text-red-600 font-medium">{errors.name}</p>}
               </div>
 
-              <div className="space-y-3">
+              <div className="space-y-2">
                 <Label htmlFor="email" className="text-base font-medium">Email Address</Label>
                 <Input
                   id="email"
@@ -188,11 +196,16 @@ export default function Contact() {
                   onChange={handleChange("email")}
                   placeholder="you@example.com"
                   disabled={loading}
-                  className="h-12 md:h-14 text-base rounded-xl border-orange-200 focus:border-orange-500"
+                  className={`h-12 md:h-14 text-base rounded-xl border-2 transition-all ${
+                    errors.email
+                      ? "border-red-500 focus:border-red-600"
+                      : "border-orange-200 focus:border-orange-500"
+                  }`}
                 />
+                {errors.email && <p className="text-sm text-red-600 font-medium">{errors.email}</p>}
               </div>
 
-              <div className="space-y-3">
+              <div className="space-y-2">
                 <Label htmlFor="subject" className="text-base font-medium">Subject</Label>
                 <Input
                   id="subject"
@@ -200,11 +213,16 @@ export default function Contact() {
                   onChange={handleChange("subject")}
                   placeholder="Order inquiry / Feedback / Suggestion"
                   disabled={loading}
-                  className="h-12 md:h-14 text-base rounded-xl border-orange-200 focus:border-orange-500"
+                  className={`h-12 md:h-14 text-base rounded-xl border-2 transition-all ${
+                    errors.subject
+                      ? "border-red-500 focus:border-red-600"
+                      : "border-orange-200 focus:border-orange-500"
+                  }`}
                 />
+                {errors.subject && <p className="text-sm text-red-600 font-medium">{errors.subject}</p>}
               </div>
 
-              <div className="space-y-3">
+              <div className="space-y-2">
                 <Label htmlFor="message" className="text-base font-medium">Your Message</Label>
                 <Textarea
                   id="message"
@@ -213,8 +231,13 @@ export default function Contact() {
                   placeholder="How can we help you today?"
                   rows={7}
                   disabled={loading}
-                  className="min-h-[160px] md:min-h-[180px] text-base rounded-xl border-orange-200 focus:border-orange-500 resize-none"
+                  className={`min-h-[160px] md:min-h-[180px] text-base rounded-xl border-2 transition-all resize-none ${
+                    errors.message
+                      ? "border-red-500 focus:border-red-600"
+                      : "border-orange-200 focus:border-orange-500"
+                  }`}
                 />
+                {errors.message && <p className="text-sm text-red-600 font-medium">{errors.message}</p>}
               </div>
 
               <Button
@@ -269,7 +292,6 @@ export default function Contact() {
             <h2 className="text-4xl md:text-5xl font-extrabold text-gray-900 mb-10">
               We Deliver To
             </h2>
-
             <div className="bg-white/90 backdrop-blur-sm rounded-2xl p-8 md:p-10 border border-orange-200 shadow-xl">
               <h3 className="text-2xl md:text-3xl font-bold text-gray-900 mb-8">Current Service Areas</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">

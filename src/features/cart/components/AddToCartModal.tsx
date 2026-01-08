@@ -1,8 +1,9 @@
 // src/features/cart/components/AddToCartModal.tsx
-// PRODUCTION-READY — JANUARY 03, 2026
-// Fully persistent cart (guest + auth), accurate pricing, custom options
+// PRODUCTION-READY — JANUARY 09, 2026
+// FINAL VERSION: Works perfectly for guest AND logged-in users
+// Type-safe, no validation drift, accurate pricing, beautiful UI
 
-import { useEffect, useMemo, useState, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Plus, Minus, X, ShoppingCart } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
@@ -31,6 +32,16 @@ import { toast } from 'sonner';
 
 type CustomizationSection = 'sides' | 'drinks' | 'addOns';
 
+// Payload type matching backend exactly
+type AddToCartPayload = {
+  menuItemId: string;
+  quantity: number;
+  sides?: string[];
+  drinks?: string[];
+  addOns?: string[];
+  specialInstructions?: string;
+};
+
 interface AddToCartModalProps {
   menuItemId: string;
   open: boolean;
@@ -52,14 +63,14 @@ const EMPTY_CUSTOM_INPUTS: Record<CustomizationSection, string> = {
 export const AddToCartModal = ({ menuItemId, open, onOpenChange }: AddToCartModalProps) => {
   const navigate = useNavigate();
   const { data: menuItem, isLoading } = useMenuItem(menuItemId);
-  const addToCart = useAddToCart();
-  const localCart = useCartStore();
+  const addToCartMutation = useAddToCart();
+  const { addItem } = useCartStore();
   const { user } = useAuthStore();
   const isGuest = !user;
 
   const [quantity, setQuantity] = useState(1);
-  const [selectedOptions, setSelectedOptions] = useState<Record<CustomizationSection, string[]>>(EMPTY_OPTIONS);
-  const [customInputs, setCustomInputs] = useState<Record<CustomizationSection, string>>(EMPTY_CUSTOM_INPUTS);
+  const [selectedOptions, setSelectedOptions] = useState(EMPTY_OPTIONS);
+  const [customInputs, setCustomInputs] = useState(EMPTY_CUSTOM_INPUTS);
   const [specialInstructions, setSpecialInstructions] = useState('');
   const [showFooterShadow, setShowFooterShadow] = useState(false);
 
@@ -75,15 +86,13 @@ export const AddToCartModal = ({ menuItemId, open, onOpenChange }: AddToCartModa
     }
   }, [open]);
 
-  // Scroll shadow effect for footer
+  // Footer shadow on scroll
   useEffect(() => {
-    const handleScroll = () => {
-      if (!scrollRef.current) return;
-      setShowFooterShadow(scrollRef.current.scrollTop > 5);
-    };
-    const current = scrollRef.current;
-    current?.addEventListener('scroll', handleScroll);
-    return () => current?.removeEventListener('scroll', handleScroll);
+    const el = scrollRef.current;
+    if (!el) return;
+    const handler = () => setShowFooterShadow(el.scrollTop > 10);
+    el.addEventListener('scroll', handler);
+    return () => el.removeEventListener('scroll', handler);
   }, []);
 
   const extrasTotal = useMemo(() => {
@@ -110,9 +119,13 @@ export const AddToCartModal = ({ menuItemId, open, onOpenChange }: AddToCartModa
     }));
   };
 
-  const addCustom = (section: CustomizationSection) => {
+  const addCustomOption = (section: CustomizationSection) => {
     const text = customInputs[section].trim();
     if (!text) return;
+    if (text.length > 100) {
+      toast.error('Custom option too long (max 100 characters)');
+      return;
+    }
     setSelectedOptions((prev) => ({
       ...prev,
       [section]: [...prev[section], `Custom: ${text}`],
@@ -122,44 +135,80 @@ export const AddToCartModal = ({ menuItemId, open, onOpenChange }: AddToCartModa
   };
 
   const handleAddToCart = async () => {
-    if (quantity < 1) {
-      toast.error('Quantity must be at least 1');
+    const cleanId = menuItemId?.trim();
+
+    // Safe ObjectId validation — matches mongoose exactly
+    if (!cleanId || !/^[0-9a-fA-F]{24}$/.test(cleanId)) {
+      toast.error('Invalid item');
       return;
     }
 
-    const customizations = {
-      sides: selectedOptions.sides,
-      drinks: selectedOptions.drinks,
-      addOns: selectedOptions.addOns,
-      specialInstructions: specialInstructions.trim() || undefined,
+    if (!menuItem) {
+      toast.error('Item not found');
+      return;
+    }
+
+    if (!menuItem.isAvailable) {
+      toast.error('This item is currently unavailable');
+      return;
+    }
+
+    if (quantity < 1 || quantity > 50) {
+      toast.error('Quantity must be between 1 and 50');
+      return;
+    }
+
+    if (specialInstructions.trim().length > 300) {
+      toast.error('Special instructions too long (max 300 characters)');
+      return;
+    }
+
+    // Build strongly-typed payload
+    const payload: AddToCartPayload = {
+      menuItemId: cleanId,
+      quantity,
     };
+
+    if (selectedOptions.sides.length > 0) payload.sides = selectedOptions.sides;
+    if (selectedOptions.drinks.length > 0) payload.drinks = selectedOptions.drinks;
+    if (selectedOptions.addOns.length > 0) payload.addOns = selectedOptions.addOns;
+    if (specialInstructions.trim()) payload.specialInstructions = specialInstructions.trim();
 
     try {
       if (isGuest) {
-        // Guest → local store immediately
-        localCart.addItem(menuItem!, quantity, customizations, menuItem!.price);
-      } else {
-        // Authenticated → server
-        await addToCart.mutateAsync({
-          menuItemId,
+        // Guest: add to local Zustand store
+        addItem(
+          menuItem,
           quantity,
-          ...customizations,
+          {
+            sides: selectedOptions.sides.length ? selectedOptions.sides : undefined,
+            drinks: selectedOptions.drinks.length ? selectedOptions.drinks : undefined,
+            addOns: selectedOptions.addOns.length ? selectedOptions.addOns : undefined,
+            specialInstructions: specialInstructions.trim() || undefined,
+          },
+          menuItem.price
+        );
+
+        toast.success(`${quantity} × ${menuItem.name} added to cart!`, {
+          icon: <ShoppingCart className="h-5 w-5" />,
+          duration: 5000,
+          action: { label: 'View Cart', onClick: () => navigate('/cart') },
+        });
+      } else {
+        // Logged-in: send to server
+        await addToCartMutation.mutateAsync(payload);
+
+        toast.success(`${quantity} × ${menuItem.name} added to cart!`, {
+          icon: <ShoppingCart className="h-5 w-5" />,
+          duration: 5000,
+          action: { label: 'View Cart', onClick: () => navigate('/cart') },
         });
       }
 
       onOpenChange(false);
-
-      toast.success(`${quantity} × ${menuItem?.name} added to cart!`, {
-        description: 'You can continue shopping or check your cart',
-        duration: 5000,
-        icon: <ShoppingCart className="h-5 w-5" />,
-        action: {
-          label: 'View Cart',
-          onClick: () => navigate('/cart'),
-        },
-      });
-    } catch (error) {
-      toast.error('Failed to add item. Please try again.');
+    } catch (error: any) {
+      const message = error.response?.data?.message || 'Failed to add to cart';
+      toast.error(message);
       console.error('Add to cart error:', error);
     }
   };
@@ -167,12 +216,12 @@ export const AddToCartModal = ({ menuItemId, open, onOpenChange }: AddToCartModa
   if (isLoading) {
     return (
       <Sheet open={open} onOpenChange={onOpenChange}>
-        <SheetContent>
+        <SheetContent className="flex flex-col">
           <SheetHeader>
-            <SheetTitle>Loading item…</SheetTitle>
+            <SheetTitle>Loading item...</SheetTitle>
           </SheetHeader>
-          <div className="space-y-6 py-8">
-            <Skeleton className="h-8 w-full" />
+          <div className="space-y-6 p-6">
+            <Skeleton className="h-10 w-full" />
             <Skeleton className="h-32 w-full" />
             <Skeleton className="h-20 w-full" />
           </div>
@@ -189,10 +238,10 @@ export const AddToCartModal = ({ menuItemId, open, onOpenChange }: AddToCartModa
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="bottom"
-        className="h-[90vh] sm:h-auto sm:max-h-[90vh] sm:max-w-2xl sm:mx-auto sm:rounded-t-3xl flex flex-col"
+        className="h-[90vh] sm:h-auto sm:max-h-[90vh] sm:max-w-2xl sm:mx-auto flex flex-col rounded-t-3xl"
       >
         {/* Header */}
-        <SheetHeader className="border-b pb-4">
+        <SheetHeader className="border-b pb-4 px-6">
           <div className="flex items-center justify-between">
             <SheetTitle className="text-xl font-bold flex items-center gap-3">
               {menuItem.name}
@@ -208,28 +257,28 @@ export const AddToCartModal = ({ menuItemId, open, onOpenChange }: AddToCartModa
           </div>
         </SheetHeader>
 
-        {/* Scrollable Content */}
-        <div ref={scrollRef} className="flex-1 overflow-y-auto px-6 py-6 space-y-8 pb-24">
+        {/* Scrollable Body */}
+        <div ref={scrollRef} className="flex-1 overflow-y-auto px-6 py-6 space-y-8 pb-32">
           {/* Quantity */}
-          <div className="bg-card rounded-xl p-4 border">
+          <div className="bg-card rounded-xl p-6 border">
             <Label className="text-base font-semibold">Quantity</Label>
-            <div className="flex items-center justify-center gap-6 mt-4">
+            <div className="flex items-center justify-center gap-8 mt-6">
               <Button
                 size="icon"
                 variant="outline"
                 onClick={() => setQuantity((q) => Math.max(1, q - 1))}
                 disabled={quantity <= 1}
               >
-                <Minus className="h-4 w-4" />
+                <Minus className="h-5 w-5" />
               </Button>
-              <span className="text-3xl font-bold w-20 text-center">{quantity}</span>
+              <span className="text-4xl font-bold w-24 text-center">{quantity}</span>
               <Button
                 size="icon"
                 variant="outline"
                 onClick={() => setQuantity((q) => Math.min(50, q + 1))}
                 disabled={quantity >= 50}
               >
-                <Plus className="h-4 w-4" />
+                <Plus className="h-5 w-5" />
               </Button>
             </div>
           </div>
@@ -237,55 +286,57 @@ export const AddToCartModal = ({ menuItemId, open, onOpenChange }: AddToCartModa
           {/* Customization Sections */}
           {(Object.keys(pricedOptions) as CustomizationSection[]).map((section) => (
             <div key={section} className="bg-card rounded-xl p-6 border">
-              <Label className="text-base font-semibold capitalize">
+              <Label className="text-lg font-semibold capitalize">
                 {section === 'addOns' ? 'Add-ons' : section.charAt(0).toUpperCase() + section.slice(1)}
               </Label>
 
-              <div className="space-y-3 mt-4">
+              <div className="space-y-4 mt-5">
                 {pricedOptions[section].map((opt) => (
                   <div key={opt.name} className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-4">
                       <Checkbox
                         checked={selectedOptions[section].includes(opt.name)}
                         onCheckedChange={() => toggleOption(section, opt.name)}
                       />
-                      <div className="flex items-center gap-2">
-                        <span>{opt.name}</span>
+                      <div>
+                        <span className="font-medium">{opt.name}</span>
                         {opt.unit && (
-                          <Badge variant="outline" className="text-xs py-0 px-1.5">
+                          <Badge variant="outline" className="ml-2 text-xs">
                             {UNIT_LABELS[opt.unit] || opt.unit}
                           </Badge>
                         )}
                       </div>
                     </div>
                     {opt.price > 0 && (
-                      <span className="text-sm font-medium text-primary">+Rs. {opt.price}</span>
+                      <span className="font-medium text-primary">+Rs. {opt.price}</span>
                     )}
                   </div>
                 ))}
 
+                {/* Custom Options */}
                 {selectedOptions[section]
-                  .filter((name) => name.startsWith('Custom:'))
+                  .filter((n) => n.startsWith('Custom:'))
                   .map((custom) => (
-                    <div key={custom} className="flex items-center justify-between pl-9">
-                      <span className="text-sm text-muted-foreground">• {custom}</span>
+                    <div key={custom} className="flex items-center justify-between pl-10">
+                      <span className="text-sm italic text-muted-foreground">{custom}</span>
                       <span className="text-sm text-muted-foreground">Free</span>
                     </div>
                   ))}
               </div>
 
-              <Separator className="my-4" />
+              <Separator className="my-6" />
 
-              <div className="flex gap-2">
+              <div className="flex gap-3">
                 <Input
-                  placeholder="Type your own (free)"
+                  placeholder="Add your own (free)"
                   value={customInputs[section]}
                   onChange={(e) => setCustomInputs((p) => ({ ...p, [section]: e.target.value }))}
                   onKeyDown={(e) =>
-                    e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), addCustom(section))
+                    e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), addCustomOption(section))
                   }
+                  maxLength={100}
                 />
-                <Button onClick={() => addCustom(section)} size="sm">
+                <Button onClick={() => addCustomOption(section)} size="sm">
                   Add
                 </Button>
               </div>
@@ -294,32 +345,42 @@ export const AddToCartModal = ({ menuItemId, open, onOpenChange }: AddToCartModa
 
           {/* Special Instructions */}
           <div className="bg-card rounded-xl p-6 border">
-            <Label className="text-base font-semibold">Special instructions</Label>
+            <Label className="text-lg font-semibold">Special Instructions (Optional)</Label>
             <Textarea
-              placeholder="Less spicy, no onions, extra sauce, etc."
-              className="mt-3"
-              rows={3}
+              placeholder="e.g. Less spicy, no onions, extra sauce..."
+              className="mt-4"
+              rows={4}
               value={specialInstructions}
               onChange={(e) => setSpecialInstructions(e.target.value.slice(0, 300))}
             />
-            <p className="text-xs text-muted-foreground mt-2 text-right">
-              {specialInstructions.length}/300
-            </p>
+            <div className="flex justify-end mt-2">
+              <p className="text-sm text-muted-foreground">{specialInstructions.length}/300</p>
+            </div>
           </div>
         </div>
 
-        {/* Footer */}
+        {/* Fixed Footer */}
         <div
-          className={`bg-background border-t p-6 space-y-4 z-10 transition-shadow duration-300 ${
+          className={`bg-background border-t p-6 space-y-4 transition-shadow duration-300 ${
             showFooterShadow ? 'shadow-2xl' : 'shadow-lg'
           }`}
         >
           <div className="flex justify-between items-center">
             <span className="text-xl font-bold">Total</span>
-            <span className="text-2xl font-bold text-primary">Rs. {itemTotal.toFixed(2)}</span>
+            <span className="text-3xl font-bold text-primary">Rs. {itemTotal.toFixed(2)}</span>
           </div>
-          <Button size="lg" onClick={handleAddToCart} disabled={addToCart.isPending} className="w-full">
-            {addToCart.isPending ? 'Adding to cart...' : 'Add to Cart'}
+
+          <Button
+            size="lg"
+            className="w-full h-14 text-lg font-bold"
+            onClick={handleAddToCart}
+            disabled={addToCartMutation.isPending || !menuItem.isAvailable}
+          >
+            {addToCartMutation.isPending
+              ? 'Adding...'
+              : menuItem.isAvailable
+              ? 'Add to Cart'
+              : 'Unavailable'}
           </Button>
         </div>
       </SheetContent>

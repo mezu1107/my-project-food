@@ -1,6 +1,5 @@
 // src/pages/ResetPassword.tsx
-// PRODUCTION-READY — FULLY RESPONSIVE (320px → 4K)
-// Mobile-first password reset page with safe token handling
+// Now uses useAuthValidation("resetPassword") + client-side confirm match
 
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
@@ -9,9 +8,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Eye, EyeOff } from "lucide-react";
-import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
 import { useAuthStore } from "@/features/auth/store/authStore";
+import { useAuthValidation } from "@/features/auth/hooks/useAuthValidation";
 
 interface ResetPasswordResponse {
   success: true;
@@ -36,21 +35,23 @@ export default function ResetPassword() {
   const navigate = useNavigate();
   const { setAuth } = useAuthStore();
 
+  const { errors, validate, clearErrors } = useAuthValidation("resetPassword");
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    clearErrors();
 
-    if (password.length < 8) {
-      toast.error("Password must be at least 8 characters");
-      return;
-    }
     if (password !== confirmPassword) {
-      toast.error("Passwords do not match");
+      errors.confirm = "Passwords do not match";
       return;
     }
+
+    const isValid = validate({ password });
+
+    if (!isValid) return;
 
     const tempToken = localStorage.getItem("temp_reset_token");
     if (!tempToken) {
-      toast.error("Session expired. Please start again.");
       navigate("/forgot-password");
       return;
     }
@@ -60,22 +61,15 @@ export default function ResetPassword() {
       const res = await apiClient.post<ResetPasswordResponse>(
         "/auth/reset-password",
         { password },
-        {
-          headers: {
-            Authorization: `Bearer ${tempToken}`,
-          },
-        }
+        { headers: { Authorization: `Bearer ${tempToken}` } }
       );
 
-      toast.success("Password reset successfully!");
-
       setAuth(res.user, res.token);
-      localStorage.setItem("token", res.token);
+      localStorage.setItem("authToken", res.token); // consistent key
       localStorage.removeItem("temp_reset_token");
 
       navigate("/home");
     } catch (err: any) {
-      toast.error(err?.response?.data?.message || "Failed to reset password");
       localStorage.removeItem("temp_reset_token");
       navigate("/forgot-password");
     } finally {
@@ -91,14 +85,13 @@ export default function ResetPassword() {
             Create New Password
           </CardTitle>
           <p className="text-base md:text-lg text-muted-foreground">
-            Your new password must be different from previous ones
+            Your new password must meet complexity requirements
           </p>
         </CardHeader>
 
         <CardContent className="space-y-6">
           <form onSubmit={handleSubmit} className="space-y-6">
-            {/* New Password */}
-            <div className="space-y-3">
+            <div className="space-y-2">
               <Label htmlFor="password" className="text-base font-medium">
                 New Password
               </Label>
@@ -107,25 +100,30 @@ export default function ResetPassword() {
                   id="password"
                   type={showPassword ? "text" : "password"}
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    clearErrors();
+                  }}
                   placeholder="••••••••"
-                  className="h-12 md:h-14 text-base md:text-lg pr-12"
+                  className={`h-12 md:h-14 text-base md:text-lg pr-12 border-2 transition-all ${
+                    errors.password ? "border-red-500" : "border-orange-200 focus:border-orange-500"
+                  }`}
                   disabled={loading}
-                  required
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-orange-600 hover:text-orange-700"
                 >
                   {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                 </button>
               </div>
+              {errors.password && (
+                <p className="text-sm text-red-600 font-medium">{errors.password}</p>
+              )}
             </div>
 
-            {/* Confirm Password */}
-            <div className="space-y-3">
+            <div className="space-y-2">
               <Label htmlFor="confirm" className="text-base font-medium">
                 Confirm Password
               </Label>
@@ -134,21 +132,27 @@ export default function ResetPassword() {
                   id="confirm"
                   type={showConfirm ? "text" : "password"}
                   value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  onChange={(e) => {
+                    setConfirmPassword(e.target.value);
+                    if (errors.confirm) clearErrors();
+                  }}
                   placeholder="••••••••"
-                  className="h-12 md:h-14 text-base md:text-lg pr-12"
+                  className={`h-12 md:h-14 text-base md:text-lg pr-12 border-2 transition-all ${
+                    errors.confirm ? "border-red-500" : "border-orange-200 focus:border-orange-500"
+                  }`}
                   disabled={loading}
-                  required
                 />
                 <button
                   type="button"
                   onClick={() => setShowConfirm(!showConfirm)}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                  aria-label={showConfirm ? "Hide password" : "Show password"}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-orange-600 hover:text-orange-700"
                 >
                   {showConfirm ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                 </button>
               </div>
+              {errors.confirm && (
+                <p className="text-sm text-red-600 font-medium">{errors.confirm}</p>
+              )}
             </div>
 
             <Button
@@ -162,10 +166,7 @@ export default function ResetPassword() {
           </form>
 
           <div className="text-center pt-4">
-            <Link
-              to="/login"
-              className="text-sm md:text-base font-medium text-primary hover:underline"
-            >
+            <Link to="/login" className="text-sm md:text-base font-medium text-orange-600 hover:underline">
               Back to Login
             </Link>
           </div>

@@ -1,10 +1,10 @@
 // src/features/cart/hooks/useCartStore.ts
-// PRODUCTION-READY — DECEMBER 28, 2025
-// Added: addMultipleItems() for fast bulk reorder (guest + authenticated)
-// Fixed: Immediate persist + TypeScript-safe
+// PRODUCTION-READY — JANUARY 09, 2026
+// Final optimized version: Reliable persistence, safe bulk reorder, perfect sync
+// Removed manual localStorage hacks — fully trusts Zustand persist middleware
 
 import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
+import { persist } from 'zustand/middleware';
 import { CartItem, MenuItemInCart } from '@/types/cart.types';
 
 interface CartState {
@@ -23,7 +23,7 @@ interface CartState {
     priceAtAdd?: number
   ) => void;
 
-  // NEW: Bulk add for reorder — replaces current cart
+  /** Bulk add — used for reorder (authenticated or guest). Replaces current cart. */
   addMultipleItems: (items: CartItem[]) => void;
 
   updateItem: (
@@ -38,155 +38,146 @@ interface CartState {
   clearCart: () => void;
   getTotal: () => number;
   getItemCount: () => number;
+
+  /** Sync server cart → local Zustand store (only called for authenticated users) */
   syncWithServer: (serverCart: { items: CartItem[]; orderNote: string }) => void;
 }
 
 // ---------------- Helpers ----------------
-const calculateTotal = (items: CartItem[]) =>
-  items.reduce((sum, item) => sum + item.priceAtAdd * item.quantity, 0);
-
 const arraysEqual = (a: string[] = [], b: string[] = []) => {
   if (a.length !== b.length) return false;
   const sortedA = [...a].sort();
   const sortedB = [...b].sort();
-  return sortedA.every((val, i) => val === sortedB[i]);
+  return sortedA.every((val, index) => val === sortedB[index]);
 };
 
 // ---------------- Store ----------------
 export const useCartStore = create<CartState>()(
   persist(
-    (set, get) => {
-      // Helper to immediately persist state
-      const persistState = (partial: Partial<CartState>) => {
-        set(partial);
-        // Force immediate flush to localStorage
-        localStorage.setItem(
-          'altawakkalfoods-cart-v6',
-          JSON.stringify({ ...get(), version: 6 })
-        );
-      };
+    (set, get) => ({
+      items: [],
+      orderNote: '',
 
-      return {
-        items: [],
-        orderNote: '',
+      addItem: (
+        menuItem,
+        quantity = 1,
+        customizations = {},
+        priceAtAdd = menuItem.price
+      ) => {
+        set((state) => {
+          const existingIndex = state.items.findIndex((item) => {
+            if (item.menuItem._id !== menuItem._id) return false;
+            if (item.specialInstructions !== (customizations.specialInstructions ?? '')) return false;
 
-        addItem: (menuItem, quantity = 1, customizations = {}, priceAtAdd = menuItem.price) => {
-          const state = get();
-          const existingIndex = state.items.findIndex((i) => {
-            if (i.menuItem._id !== menuItem._id) return false;
-            if (i.specialInstructions !== (customizations.specialInstructions ?? '')) return false;
             return (
-              arraysEqual(i.sides ?? [], customizations.sides ?? []) &&
-              arraysEqual(i.drinks ?? [], customizations.drinks ?? []) &&
-              arraysEqual(i.addOns ?? [], customizations.addOns ?? [])
+              arraysEqual(item.sides ?? [], customizations.sides ?? []) &&
+              arraysEqual(item.drinks ?? [], customizations.drinks ?? []) &&
+              arraysEqual(item.addOns ?? [], customizations.addOns ?? [])
             );
           });
 
-          let newItems: CartItem[];
-
-          if (existingIndex > -1) {
-            newItems = [...state.items];
+          if (existingIndex !== -1) {
+            const newItems = [...state.items];
             newItems[existingIndex].quantity = Math.min(
               newItems[existingIndex].quantity + quantity,
               50
             );
-          } else {
-            const newItem: CartItem = {
-              _id: crypto.randomUUID(),
-              menuItem,
-              quantity,
-              priceAtAdd,
-              sides: customizations.sides,
-              drinks: customizations.drinks,
-              addOns: customizations.addOns,
-              specialInstructions: customizations.specialInstructions,
-              addedAt: new Date().toISOString(),
-            };
-            newItems = [...state.items, newItem];
+            return { items: newItems };
           }
 
-          persistState({ items: newItems });
-        },
+          const newItem: CartItem = {
+            _id: crypto.randomUUID(),
+            menuItem,
+            quantity,
+            priceAtAdd,
+            sides: customizations.sides,
+            drinks: customizations.drinks,
+            addOns: customizations.addOns,
+            specialInstructions: customizations.specialInstructions,
+            addedAt: new Date().toISOString(),
+          };
 
-        // NEW: Bulk add — used by reorder (replaces current cart)
-        addMultipleItems: (newItems: CartItem[]) => {
-          if (!Array.isArray(newItems)) {
-            persistState({ items: [] });
-            return;
+          return { items: [...state.items, newItem] };
+        });
+      },
+
+      addMultipleItems: (incomingItems) => {
+        set(() => {
+          if (!Array.isArray(incomingItems)) {
+            return { items: [], orderNote: '' };
           }
 
-          // Reorder replaces the entire cart — clean and expected behavior
-          persistState({ items: newItems });
-        },
+          // Sanitize: only valid items with positive quantity
+          const validItems = incomingItems.filter(
+            (item): item is CartItem =>
+              !!item &&
+              !!item.menuItem &&
+              typeof item.quantity === 'number' &&
+              item.quantity > 0
+          );
 
-        updateItem: (cartItemId, updates) => {
-          const state = get();
-          const idx = state.items.findIndex((i) => i._id === cartItemId);
-          if (idx === -1) return;
+          return { items: validItems, orderNote: '' }; // Reorder clears note
+        });
+      },
 
-          const updatedItems = [...state.items];
+      updateItem: (cartItemId, updates) => {
+        set((state) => {
+          const index = state.items.findIndex((item) => item._id === cartItemId);
+          if (index === -1) return state;
+
+          const newItems = [...state.items];
 
           if (updates.quantity !== undefined) {
             if (updates.quantity <= 0) {
-              updatedItems.splice(idx, 1);
+              newItems.splice(index, 1);
             } else {
-              updatedItems[idx].quantity = Math.min(updates.quantity, 50);
+              newItems[index].quantity = Math.min(updates.quantity, 50);
             }
           }
-          if (updates.sides !== undefined) updatedItems[idx].sides = updates.sides;
-          if (updates.drinks !== undefined) updatedItems[idx].drinks = updates.drinks;
-          if (updates.addOns !== undefined) updatedItems[idx].addOns = updates.addOns;
+
+          if (updates.sides !== undefined) newItems[index].sides = updates.sides;
+          if (updates.drinks !== undefined) newItems[index].drinks = updates.drinks;
+          if (updates.addOns !== undefined) newItems[index].addOns = updates.addOns;
           if (updates.specialInstructions !== undefined)
-            updatedItems[idx].specialInstructions = updates.specialInstructions;
+            newItems[index].specialInstructions = updates.specialInstructions;
 
-          persistState({
-            items: updatedItems,
+          return {
+            items: newItems,
             orderNote: updates.orderNote ?? state.orderNote,
-          });
-        },
+          };
+        });
+      },
 
-        removeItem: (cartItemId) => {
-          const newItems = get().items.filter((i) => i._id !== cartItemId);
-          persistState({ items: newItems });
-        },
+      removeItem: (cartItemId) =>
+        set((state) => ({
+          items: state.items.filter((item) => item._id !== cartItemId),
+        })),
 
-        setOrderNote: (note) => {
-          persistState({ orderNote: note });
-        },
+      setOrderNote: (note) => set({ orderNote: note }),
 
-        clearCart: () => {
-          persistState({ items: [], orderNote: '' });
-        },
+      clearCart: () => set({ items: [], orderNote: '' }),
 
-        getTotal: () => calculateTotal(get().items),
-        getItemCount: () => get().items.reduce((sum, item) => sum + item.quantity, 0),
+      getTotal: () =>
+        get().items.reduce((sum, item) => sum + item.priceAtAdd * item.quantity, 0),
 
-       syncWithServer: ({ items, orderNote }) => {
-  console.log('╔══════════════════════════════════════╗');
-  console.log('║ SERVER → ZUSTAND SYNC HAPPENED       ║');
-  console.log('╠══════════════════════════════════════╣');
-  console.log('Items received:', items.length);
-  if (items.length > 0) {
-    console.log('First item name:', items[0]?.menuItem?.name);
-    console.log('Quantity:', items[0]?.quantity);
-    console.log('Has selectedOptions?', !!items[0]?.selectedOptions);
-  }
-  console.log('Order note:', orderNote);
-  console.log('╚══════════════════════════════════════╝');
+      getItemCount: () =>
+        get().items.reduce((sum, item) => sum + item.quantity, 0),
 
-  // Also log the full state after set
-  set({ items, orderNote });
-  console.log('New Zustand items after sync:', get().items);
-},
-      };
-    },
+      syncWithServer: ({ items, orderNote }) => {
+        // Only for authenticated users — replaces local cart with server truth
+        set({ items, orderNote });
+      },
+    }),
     {
-      name: 'altawakkalfoods-cart-v6',
-      version: 6,
-      storage: createJSONStorage(() => localStorage),
-      partialize: (state) => ({ items: state.items, orderNote: state.orderNote }),
+      name: 'altawakkalfoods-cart-v7', // ← Updated version
+      version: 7,
+      partialize: (state) => ({
+        items: state.items,
+        orderNote: state.orderNote,
+      }),
       migrate: (persistedState: any, version) => {
-        if (version < 6) {
+        // Clear old versions to prevent schema conflicts
+        if (version < 7) {
           return { items: [], orderNote: '' };
         }
         return persistedState as CartState;

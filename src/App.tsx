@@ -73,6 +73,7 @@ import { CustomerList } from "./features/customers/admin/customers/CustomerList"
 import { StaffList } from "./components/admin/staff/StaffList";
 import { InventoryList } from "./components/admin/inventory/InventoryList";
 import AnalyticsPage from "./features/analytics/AnalyticsPage";
+import AdminOrdersPage from "@/pages/admin/orders/AdminOrdersPage";
 
 // Reviews
 import CustomerReviewsPage from "./features/reviews/pages/CustomerReviewsPage";
@@ -162,6 +163,7 @@ const router = createBrowserRouter(
         { path: "areas/add", element: <AdminAddArea /> },
         { path: "areas/edit/:id", element: <AdminEditArea /> },
         { path: "delivery-zones", element: <AddDeliveryZone /> },
+        { path: "ordersPage", element: <AdminOrdersPage /> },
         { path: "orders", element: <AdminOrders /> },
         { path: "orders/:orderId", element: <AdminOrderDetails /> },
         { path: "contact", element: <ContactMessagesPage /> },

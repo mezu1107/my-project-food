@@ -1,6 +1,5 @@
 // src/pages/VerifyOtp.tsx
-// PRODUCTION-READY — FULLY RESPONSIVE (320px → 4K)
-// Mobile-first OTP verification with large touch-friendly input
+// Now uses useAuthValidation("verifyOtp")
 
 import { useState, useEffect } from "react";
 import { useSearchParams, Link } from "react-router-dom";
@@ -8,8 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
+import { useAuthValidation } from "@/features/auth/hooks/useAuthValidation";
 
 interface VerifyOtpResponse {
   success: true;
@@ -31,35 +30,33 @@ export default function VerifyOtp() {
   const [otp, setOtp] = useState("");
   const [loading, setLoading] = useState(false);
 
+  const { errors, validate, clearErrors } = useAuthValidation("verifyOtp");
+
   useEffect(() => {
     if (!identifier) {
-      toast.error("Invalid session. Please start again.");
       window.location.href = "/forgot-password";
     }
   }, [identifier]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (otp.length !== 6 || !/^\d{6}$/.test(otp)) {
-      toast.error("Please enter a valid 6-digit OTP");
-      return;
-    }
+    clearErrors();
+
+    const payload = identifier.includes("@")
+      ? { email: identifier, otp }
+      : { phone: identifier, otp };
+
+    const isValid = validate(payload);
+
+    if (!isValid) return;
 
     setLoading(true);
     try {
-      const payload = identifier.includes("@")
-        ? { email: identifier, otp }
-        : { phone: identifier, otp };
-
       const res = await apiClient.post<VerifyOtpResponse>("/auth/verify-otp", payload);
-
-      toast.success("OTP verified! Please set your new password.");
-
       localStorage.setItem("temp_reset_token", res.token);
-
       window.location.href = "/reset-password";
     } catch (err: any) {
-      toast.error(err?.response?.data?.message || "Invalid or expired OTP");
+      // Server errors handled by backend message
     } finally {
       setLoading(false);
     }
@@ -79,7 +76,7 @@ export default function VerifyOtp() {
 
         <CardContent className="space-y-8">
           <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="space-y-3">
+            <div className="space-y-2">
               <Label htmlFor="otp" className="text-base md:text-lg font-medium">
                 6-Digit OTP
               </Label>
@@ -90,12 +87,25 @@ export default function VerifyOtp() {
                 maxLength={6}
                 placeholder="123456"
                 value={otp}
-                onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
-                className="h-16 md:h-20 text-center text-3xl md:text-4xl tracking-widest font-mono"
+                onChange={(e) => {
+                  const value = e.target.value.replace(/\D/g, "").slice(0, 6);
+                  setOtp(value);
+                  clearErrors();
+                }}
+                className={`h-16 md:h-20 text-center text-3xl md:text-4xl tracking-widest font-mono border-2 transition-all ${
+                  errors.otp ? "border-red-500" : "border-orange-200 focus:border-orange-500"
+                }`}
                 disabled={loading}
-                required
                 autoFocus
               />
+              {errors.otp && (
+                <p className="text-sm text-red-600 font-medium text-center">{errors.otp}</p>
+              )}
+              {(errors.email || errors.phone || errors.general) && (
+                <p className="text-sm text-red-600 font-medium text-center">
+                  {errors.email || errors.phone || errors.general}
+                </p>
+              )}
             </div>
 
             <Button
@@ -114,7 +124,7 @@ export default function VerifyOtp() {
             </p>
             <Link
               to="/forgot-password"
-              className="text-sm md:text-base font-medium text-primary hover:underline"
+              className="text-sm md:text-base font-medium text-orange-600 hover:underline"
             >
               Resend OTP
             </Link>

@@ -1,6 +1,5 @@
 // src/pages/ForgotPassword.tsx
-// PRODUCTION-READY — FULLY RESPONSIVE (320px → 4K)
-// Mobile-first forgot password with clean input
+// PRODUCTION-READY — Uses useAuthValidation("forgotPassword")
 
 import { useState } from "react";
 import { Link } from "react-router-dom";
@@ -9,8 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Mail, Phone } from "lucide-react";
-import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
+import { useAuthValidation } from "@/features/auth/hooks/useAuthValidation";
 
 interface ForgotPasswordResponse {
   success: boolean;
@@ -22,33 +21,40 @@ export default function ForgotPassword() {
   const [identifier, setIdentifier] = useState("");
   const [loading, setLoading] = useState(false);
 
+  const { errors, validate, clearErrors } = useAuthValidation("forgotPassword");
+
+  const isEmail = identifier.includes("@");
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!identifier.trim()) {
-      toast.error("Please enter your email or phone number");
-      return;
-    }
+    clearErrors();
+
+    const payload = isEmail
+      ? { email: identifier.trim().toLowerCase() }
+      : { phone: identifier.trim() };
+
+    const isValid = validate(payload);
+    if (!isValid) return;
 
     setLoading(true);
     try {
-      const payload = identifier.includes("@")
-        ? { email: identifier.trim().toLowerCase() }
-        : { phone: identifier.trim() };
-
       const res = await apiClient.post<ForgotPasswordResponse>("/auth/forgot-password", payload);
 
-      toast.success(res.message || "OTP sent successfully!");
-
       if (res.debug_otp) {
-        toast.info(`Development OTP: ${res.debug_otp}`, { duration: 15000 });
+        // toast.info(`Development OTP: ${res.debug_otp}`, { duration: 15000 });
       }
 
       window.location.href = `/verify-otp?identifier=${encodeURIComponent(identifier.trim())}`;
     } catch (err: any) {
-      toast.error(err?.response?.data?.message || "Failed to send OTP. Please try again.");
+      // Server-side errors will be shown via toast if needed
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleChange = (value: string) => {
+    setIdentifier(value);
+    clearErrors();
   };
 
   return (
@@ -65,12 +71,12 @@ export default function ForgotPassword() {
 
         <CardContent className="space-y-6">
           <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="space-y-3">
+            <div className="space-y-2">
               <Label htmlFor="identifier" className="text-base md:text-lg font-medium">
                 Email or Phone Number
               </Label>
               <div className="relative">
-                {identifier.includes("@") ? (
+                {isEmail ? (
                   <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-orange-600" />
                 ) : (
                   <Phone className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-orange-600" />
@@ -80,12 +86,20 @@ export default function ForgotPassword() {
                   type="text"
                   placeholder="john@example.com or 03123456789"
                   value={identifier}
-                  onChange={(e) => setIdentifier(e.target.value)}
-                  className="pl-12 h-12 md:h-14 text-base md:text-lg"
+                  onChange={(e) => handleChange(e.target.value)}
+                  className={`pl-12 h-12 md:h-14 text-base md:text-lg border-2 transition-all ${
+                    errors.email || errors.phone || errors.general
+                      ? "border-red-500 focus:border-red-600"
+                      : "border-orange-200 focus:border-orange-500"
+                  }`}
                   disabled={loading}
-                  required
                 />
               </div>
+              {(errors.email || errors.phone || errors.general) && (
+                <p className="text-sm text-red-600 font-medium">
+                  {errors.email || errors.phone || errors.general}
+                </p>
+              )}
             </div>
 
             <Button
@@ -101,7 +115,7 @@ export default function ForgotPassword() {
           <div className="text-center pt-4">
             <Link
               to="/login"
-              className="text-sm md:text-base font-medium text-primary hover:underline"
+              className="text-sm md:text-base font-medium text-orange-600 hover:underline transition-all"
             >
               Back to Login
             </Link>

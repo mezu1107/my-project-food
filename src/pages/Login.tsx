@@ -1,49 +1,55 @@
 // src/pages/Login.tsx
 // PRODUCTION-READY — FULLY RESPONSIVE (320px → 4K)
-// Mobile-first login page with fluid layout, touch-friendly inputs
+// Now uses useAuthValidation("login") for precise backend mirroring
 
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Mail, Lock, Eye, EyeOff } from "lucide-react";
-import { toast } from "sonner";
+import { Mail, Phone, Lock, Eye, EyeOff } from "lucide-react";
 
 import { useLogin } from "@/features/auth/hooks/useLogin";
+import { useAuthValidation } from "@/features/auth/hooks/useAuthValidation";
 
 export default function Login() {
-  const navigate = useNavigate();
   const loginMutation = useLogin();
+  const { errors, validate, clearErrors } = useAuthValidation("login");
 
   const [showPassword, setShowPassword] = useState(false);
-  const [credentials, setCredentials] = useState({
-    emailOrPhone: "",
-    password: "",
-  });
+  const [emailOrPhone, setEmailOrPhone] = useState("");
+  const [password, setPassword] = useState("");
+
+  const isEmail = emailOrPhone.includes("@");
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    clearErrors();
 
-    if (!credentials.emailOrPhone.trim()) {
-      toast.error("Please enter your email or phone");
-      return;
+    const values = {
+      email: isEmail ? emailOrPhone.trim().toLowerCase() : undefined,
+      phone: !isEmail ? emailOrPhone.trim() : undefined,
+      password,
+    };
+
+    const isValid = validate(values);
+
+    if (!isValid) return;
+
+    loginMutation.mutate({
+      email: values.email,
+      phone: values.phone,
+      password,
+    });
+  };
+
+  const handleEmailOrPhoneChange = (value: string) => {
+    setEmailOrPhone(value);
+    if (errors.email || errors.phone || errors.general) {
+      clearErrors();
     }
-    if (!credentials.password) {
-      toast.error("Password is required");
-      return;
-    }
-
-    const email = credentials.emailOrPhone.includes("@")
-      ? credentials.emailOrPhone.trim().toLowerCase()
-      : undefined;
-    const phone = !credentials.emailOrPhone.includes("@")
-      ? credentials.emailOrPhone.trim()
-      : undefined;
-
-    loginMutation.mutate({ email, phone, password: credentials.password });
   };
 
   return (
@@ -56,7 +62,6 @@ export default function Login() {
         transition={{ duration: 0.7, ease: "easeOut" }}
         className="w-full max-w-md relative z-10"
       >
-        {/* Logo & Title */}
         <header className="text-center mb-8 md:mb-10">
           <motion.div
             initial={{ scale: 0.8 }}
@@ -75,7 +80,6 @@ export default function Login() {
           </p>
         </header>
 
-        {/* Login Card */}
         <Card className="shadow-2xl border-0 overflow-hidden">
           <CardHeader className="bg-gradient-to-r from-orange-500 to-amber-600 text-white py-8">
             <CardTitle className="text-2xl md:text-3xl font-bold text-center">
@@ -86,33 +90,39 @@ export default function Login() {
           <CardContent className="pt-8 pb-10 px-6 md:px-10">
             <form onSubmit={handleSubmit} className="space-y-6">
               {/* Email/Phone Field */}
-              <div className="space-y-3">
+              <div className="space-y-2">
                 <Label htmlFor="emailOrPhone" className="text-base font-medium">
                   Email or Phone Number
                 </Label>
                 <div className="relative">
-                  {credentials.emailOrPhone.includes("@") ? (
+                  {isEmail ? (
                     <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-orange-600" />
                   ) : (
-                    <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-orange-600" />
+                    <Phone className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-orange-600" />
                   )}
                   <Input
                     id="emailOrPhone"
                     type="text"
                     placeholder="john@example.com or 03123456789"
-                    className="pl-12 h-12 md:h-14 text-base md:text-lg border-2 border-orange-200 focus:border-orange-500 transition-all"
-                    value={credentials.emailOrPhone}
-                    onChange={(e) =>
-                      setCredentials({ ...credentials, emailOrPhone: e.target.value })
-                    }
+                    className={`pl-12 h-12 md:h-14 text-base md:text-lg border-2 transition-all ${
+                      errors.email || errors.phone || errors.general
+                        ? "border-red-500 focus:border-red-600"
+                        : "border-orange-200 focus:border-orange-500"
+                    }`}
+                    value={emailOrPhone}
+                    onChange={(e) => handleEmailOrPhoneChange(e.target.value)}
                     disabled={loginMutation.isPending}
-                    required
                   />
                 </div>
+                {(errors.email || errors.phone || errors.general) && (
+                  <p className="text-sm text-red-600 font-medium">
+                    {errors.email || errors.phone || errors.general}
+                  </p>
+                )}
               </div>
 
               {/* Password Field */}
-              <div className="space-y-3">
+              <div className="space-y-2">
                 <Label htmlFor="password" className="text-base font-medium">
                   Password
                 </Label>
@@ -122,13 +132,17 @@ export default function Login() {
                     id="password"
                     type={showPassword ? "text" : "password"}
                     placeholder="••••••••"
-                    className="pl-12 pr-14 h-12 md:h-14 text-base md:text-lg border-2 border-orange-200 focus:border-orange-500 transition-all"
-                    value={credentials.password}
-                    onChange={(e) =>
-                      setCredentials({ ...credentials, password: e.target.value })
-                    }
+                    className={`pl-12 pr-14 h-12 md:h-14 text-base md:text-lg border-2 transition-all ${
+                      errors.password
+                        ? "border-red-500 focus:border-red-600"
+                        : "border-orange-200 focus:border-orange-500"
+                    }`}
+                    value={password}
+                    onChange={(e) => {
+                      setPassword(e.target.value);
+                      if (errors.password) clearErrors();
+                    }}
                     disabled={loginMutation.isPending}
-                    required
                   />
                   <button
                     type="button"
@@ -139,6 +153,9 @@ export default function Login() {
                     {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                   </button>
                 </div>
+                {errors.password && (
+                  <p className="text-sm text-red-600 font-medium">{errors.password}</p>
+                )}
 
                 <div className="text-right">
                   <Link
@@ -150,7 +167,6 @@ export default function Login() {
                 </div>
               </div>
 
-              {/* Submit Button */}
               <Button
                 type="submit"
                 size="lg"
@@ -161,7 +177,6 @@ export default function Login() {
               </Button>
             </form>
 
-            {/* Register Link */}
             <div className="mt-8 text-center">
               <p className="text-base text-muted-foreground">
                 Don't have an account?{" "}
@@ -176,7 +191,6 @@ export default function Login() {
           </CardContent>
         </Card>
 
-        {/* Footer Note */}
         <p className="text-center text-sm text-muted-foreground mt-8">
           © {new Date().getFullYear()} AM Enterprises Pakistan • Authentic Pakistani Cuisine Delivered
         </p>

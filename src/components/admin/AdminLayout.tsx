@@ -1,6 +1,6 @@
 // src/components/admin/AdminLayout.tsx
 // FINAL PRODUCTION — DECEMBER 21, 2025
-// Updated with Reviews & Analytics navigation
+// Logo click navigates to Admin Dashboard
 
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
@@ -18,8 +18,10 @@ import {
   X,
   UserPlus,
   Package,
-  Star,           // ← NEW: Icon for Reviews
-  BarChart3       // ← NEW: Icon for Analytics
+  Star,
+  BarChart3,
+  Box,
+  Clipboard,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -37,22 +39,23 @@ const AdminLayout = () => {
     localStorage.removeItem("token");
     navigate("/login", { replace: true });
   };
+const navItems = [
+  { icon: LayoutDashboard, label: "Dashboard", path: "/admin" },
+  { icon: ShoppingBag, label: "Orders", path: "/admin/orders" },
+  { icon: Package, label: "Orders Page", path: "/admin/ordersPage" },
+  { icon: Users, label: "Customers", path: "/admin/customers" },
+  { icon: Bike, label: "Riders", path: "/admin/riders" },
+  { icon: Tag, label: "Deals & Offers", path: "/admin/deals" },
+  { icon: MapPin, label: "Delivery Areas", path: "/admin/areas" },
+  { icon: UtensilsCrossed, label: "Menu Items", path: "/admin/menu" },
+  { icon: Star, label: "Reviews", path: "/admin/reviews" },
+  { icon: BarChart3, label: "Analytics", path: "/admin/analytics" },
+  { icon: MessageSquare, label: "Contact Messages", path: "/admin/contact" },
+  { icon: UserPlus, label: "Staff Promote", path: "/admin/staff" },
+  { icon: Box, label: "Inventory Management", path: "/admin/inventory" },
+  { icon: Clipboard, label: "Kitchen Display", path: "/admin/kitchen" },
+];
 
-  const navItems = [
-    { icon: LayoutDashboard, label: "Dashboard", path: "/admin" },
-    { icon: ShoppingBag, label: "Orders", path: "/admin/orders" },
-    { icon: Users, label: "Customers", path: "/admin/customers" }, // Fixed: was /admin/Customers (case-sensitive)
-    { icon: Bike, label: "Riders", path: "/admin/riders" },
-    { icon: Tag, label: "Deals & Offers", path: "/admin/deals" },
-    { icon: MapPin, label: "Delivery Areas", path: "/admin/areas" },
-    { icon: UtensilsCrossed, label: "Menu Items", path: "/admin/menu" },
-    { icon: Star, label: "Reviews", path: "/admin/reviews" },
-    { icon: BarChart3, label: "Analytics", path: "/admin/analytics" },
-    { icon: MessageSquare, label: "Contact Messages", path: "/admin/contact" },
-    { icon: UserPlus, label: "Staff Promote", path: "/admin/staff" },
-    { icon: Package, label: "Inventory Management", path: "/admin/inventory" },
-    { icon: Monitor, label: "Kitchen Display", path: "/admin/kitchen" },
-  ];
 
   const currentPageTitle =
     navItems.find(
@@ -66,21 +69,28 @@ const AdminLayout = () => {
       {/* Mobile Overlay */}
       {sidebarOpen && (
         <div
-          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+          className="fixed inset-0 z-40 bg-black/50 lg:hidden"
           onClick={() => setSidebarOpen(false)}
         />
       )}
 
       {/* Sidebar */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-64 border-r bg-card transform transition-transform duration-300 lg:translate-x-0 lg:static ${
+        className={`fixed inset-y-0 left-0 z-50 w-64 border-r bg-card transition-transform duration-300 lg:static lg:translate-x-0 ${
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
         <div className="flex h-full flex-col">
           {/* Logo */}
           <div className="flex h-16 items-center justify-between border-b px-6">
-            <h1 className="text-xl font-bold text-primary">Al Tawakkalfoods Admin</h1>
+            <Link
+              to="/home"
+              className="text-xl font-bold text-primary hover:opacity-80"
+              onClick={() => setSidebarOpen(false)}
+            >
+              Al Tawakkalfoods Admin
+            </Link>
+
             <Button
               variant="ghost"
               size="icon"
@@ -92,7 +102,7 @@ const AdminLayout = () => {
           </div>
 
           {/* Navigation */}
-          <nav className="flex-1 space-y-1 p-4 overflow-y-auto">
+          <nav className="flex-1 space-y-1 overflow-y-auto p-4">
             {navItems.map((item) => {
               const Icon = item.icon;
               const isActive =
@@ -116,10 +126,10 @@ const AdminLayout = () => {
               );
             })}
 
-            <div className="pt-6 mt-6 border-t">
+            <div className="mt-6 border-t pt-6">
               <Button
                 variant="outline"
-                className="w-full justify-start gap-3 text-destructive hover:text-destructive hover:bg-destructive/10"
+                className="w-full justify-start gap-3 text-destructive hover:bg-destructive/10 hover:text-destructive"
                 onClick={handleLogout}
               >
                 <LogOut className="h-5 w-5" />
@@ -131,7 +141,7 @@ const AdminLayout = () => {
       </aside>
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col">
+      <div className="flex flex-1 flex-col">
         {/* Top Header */}
         <header className="flex h-16 items-center justify-between border-b bg-card px-4 lg:px-6">
           <div className="flex items-center gap-4">
@@ -150,7 +160,7 @@ const AdminLayout = () => {
             <span className="hidden text-sm text-muted-foreground sm:block">
               Welcome, <strong>{currentUser?.name || "Admin"}</strong>
             </span>
-            <div className="h-10 w-10 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-lg">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/20 text-lg font-bold text-primary">
               {currentUser?.name?.charAt(0).toUpperCase() || "A"}
             </div>
           </div>

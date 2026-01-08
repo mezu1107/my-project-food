@@ -1,6 +1,5 @@
 // src/pages/ChangePassword.tsx
-// PRODUCTION-READY — FULLY RESPONSIVE (320px → 4K)
-// Mobile-first change password with password visibility toggle
+// PRODUCTION-READY — Uses useAuthValidation("changePassword")
 
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -9,8 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Eye, EyeOff } from "lucide-react";
-import { toast } from "sonner";
 import { apiClient } from "@/lib/api";
+import { useAuthValidation } from "@/features/auth/hooks/useAuthValidation";
 
 export default function ChangePassword() {
   const [currentPassword, setCurrentPassword] = useState("");
@@ -22,17 +21,22 @@ export default function ChangePassword() {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
+  const { errors, validate, clearErrors } = useAuthValidation("changePassword");
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    clearErrors();
 
-    if (newPassword.length < 8) {
-      toast.error("New password must be at least 8 characters");
-      return;
-    }
+    // Client-side confirm password match
     if (newPassword !== confirmPassword) {
-      toast.error("New passwords do not match");
+      // We reuse newPassword error slot for this message
+      (errors as any).newPassword = "New passwords do not match";
+      setLoading(false);
       return;
     }
+
+    const isValid = validate({ currentPassword, newPassword });
+    if (!isValid) return;
 
     setLoading(true);
     try {
@@ -41,10 +45,9 @@ export default function ChangePassword() {
         newPassword,
       });
 
-      toast.success("Password changed successfully!");
       navigate("/profile");
     } catch (err: any) {
-      toast.error(err?.response?.data?.message || "Failed to change password");
+      // Backend errors (e.g. wrong current password) handled by toast if needed
     } finally {
       setLoading(false);
     }
@@ -65,7 +68,7 @@ export default function ChangePassword() {
         <CardContent className="space-y-6">
           <form onSubmit={handleSubmit} className="space-y-6">
             {/* Current Password */}
-            <div className="space-y-3">
+            <div className="space-y-2">
               <Label htmlFor="current" className="text-base md:text-lg font-medium">
                 Current Password
               </Label>
@@ -74,24 +77,32 @@ export default function ChangePassword() {
                   id="current"
                   type={showCurrent ? "text" : "password"}
                   value={currentPassword}
-                  onChange={(e) => setCurrentPassword(e.target.value)}
-                  className="h-12 md:h-14 text-base md:text-lg pr-12"
+                  onChange={(e) => {
+                    setCurrentPassword(e.target.value);
+                    if (errors.currentPassword) clearErrors();
+                  }}
+                  className={`h-12 md:h-14 text-base md:text-lg pr-12 border-2 transition-all ${
+                    errors.currentPassword
+                      ? "border-red-500 focus:border-red-600"
+                      : "border-orange-200 focus:border-orange-500"
+                  }`}
                   disabled={loading}
-                  required
                 />
                 <button
                   type="button"
                   onClick={() => setShowCurrent(!showCurrent)}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                  aria-label={showCurrent ? "Hide password" : "Show password"}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-orange-600 hover:text-orange-700"
                 >
                   {showCurrent ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                 </button>
               </div>
+              {errors.currentPassword && (
+                <p className="text-sm text-red-600 font-medium">{errors.currentPassword}</p>
+              )}
             </div>
 
             {/* New Password */}
-            <div className="space-y-3">
+            <div className="space-y-2">
               <Label htmlFor="new" className="text-base md:text-lg font-medium">
                 New Password
               </Label>
@@ -100,24 +111,32 @@ export default function ChangePassword() {
                   id="new"
                   type={showNew ? "text" : "password"}
                   value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  className="h-12 md:h-14 text-base md:text-lg pr-12"
+                  onChange={(e) => {
+                    setNewPassword(e.target.value);
+                    clearErrors();
+                  }}
+                  className={`h-12 md:h-14 text-base md:text-lg pr-12 border-2 transition-all ${
+                    errors.newPassword
+                      ? "border-red-500 focus:border-red-600"
+                      : "border-orange-200 focus:border-orange-500"
+                  }`}
                   disabled={loading}
-                  required
                 />
                 <button
                   type="button"
                   onClick={() => setShowNew(!showNew)}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                  aria-label={showNew ? "Hide password" : "Show password"}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-orange-600 hover:text-orange-700"
                 >
                   {showNew ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                 </button>
               </div>
+              {errors.newPassword && (
+                <p className="text-sm text-red-600 font-medium">{errors.newPassword}</p>
+              )}
             </div>
 
             {/* Confirm Password */}
-            <div className="space-y-3">
+            <div className="space-y-2">
               <Label htmlFor="confirm" className="text-base md:text-lg font-medium">
                 Confirm New Password
               </Label>
@@ -126,20 +145,30 @@ export default function ChangePassword() {
                   id="confirm"
                   type={showConfirm ? "text" : "password"}
                   value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="h-12 md:h-14 text-base md:text-lg pr-12"
+                  onChange={(e) => {
+                    setConfirmPassword(e.target.value);
+                    if ((errors as any).newPassword === "New passwords do not match") {
+                      clearErrors();
+                    }
+                  }}
+                  className={`h-12 md:h-14 text-base md:text-lg pr-12 border-2 transition-all ${
+                    (errors as any).newPassword === "New passwords do not match"
+                      ? "border-red-500 focus:border-red-600"
+                      : "border-orange-200 focus:border-orange-500"
+                  }`}
                   disabled={loading}
-                  required
                 />
                 <button
                   type="button"
                   onClick={() => setShowConfirm(!showConfirm)}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                  aria-label={showConfirm ? "Hide password" : "Show password"}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-orange-600 hover:text-orange-700"
                 >
                   {showConfirm ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                 </button>
               </div>
+              {(errors as any).newPassword === "New passwords do not match" && (
+                <p className="text-sm text-red-600 font-medium">New passwords do not match</p>
+              )}
             </div>
 
             <Button
@@ -154,8 +183,9 @@ export default function ChangePassword() {
 
           <div className="text-center pt-4">
             <button
+              type="button"
               onClick={() => navigate("/profile")}
-              className="text-sm md:text-base font-medium text-primary hover:underline"
+              className="text-sm md:text-base font-medium text-orange-600 hover:underline transition-all"
             >
               Back to Profile
             </button>
