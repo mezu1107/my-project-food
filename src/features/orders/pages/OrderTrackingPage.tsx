@@ -1,11 +1,9 @@
 // src/features/orders/pages/OrderTrackingPage.tsx
-// FIXED: Properly destructure nested 'order' from TrackOrderResponse
-// All TS2339 & TS2551 errors resolved
-// DATE: December 29, 2025
+// PRODUCTION-READY — JANUARY 09, 2026
+// REVIEW CTA: Only shown to authenticated users (via Zustand auth store)
 
-import { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-
+import { useState } from 'react';
 import {
   Card,
   CardContent,
@@ -30,12 +28,12 @@ import {
   RotateCcw,
   Star,
   Loader2,
+  LogIn,
 } from 'lucide-react';
-
-import confetti from 'canvas-confetti';
 
 import { useTrackOrder, useReorder } from '@/features/orders/hooks/useOrders';
 import { useOrderSocket } from '@/features/orders/hooks/useOrderSocket';
+import { useAuthStore } from '@/features/auth/store/authStore'; // ← Correct import
 
 import {
   ORDER_STATUS_LABELS,
@@ -61,36 +59,28 @@ export default function OrderTrackingPage() {
   const { orderId } = useParams<{ orderId: string }>();
   const navigate = useNavigate();
 
+  // Get auth state from Zustand
+  const { user, token } = useAuthStore();
+  const isAuthenticated = !!user && !!token;
+
   const { data: response, isLoading, error } = useTrackOrder(orderId);
   const reorderMutation = useReorder();
 
   const [reviewModalOpen, setReviewModalOpen] = useState(false);
 
-  // IMPORTANT: Extract the nested real order object
   const order = response?.order;
 
+  // Real-time updates
   useOrderSocket(orderId);
-
-  // Confetti on delivery
-  useEffect(() => {
-    if (order?.status === 'delivered') {
-      confetti({
-        particleCount: 150,
-        spread: 90,
-        origin: { y: 0.6 },
-      });
-    }
-  }, [order?.status]);
 
   const handleReorder = async () => {
     if (!orderId) return;
-
     try {
       await reorderMutation.mutateAsync(orderId);
-      toast.success('Items from this order have been added to your cart!');
+      toast.success('Items added to cart! 🎉');
       setTimeout(() => navigate('/cart'), 800);
     } catch {
-      // Error already handled in useReorder hook
+      // Error handled in hook
     }
   };
 
@@ -98,8 +88,9 @@ export default function OrderTrackingPage() {
     return (
       <main className="min-h-screen flex items-center justify-center px-4 py-12 bg-muted/20">
         <Card className="w-full max-w-md text-center p-8 md:p-10">
-          <XCircle className="h-14 w-14 md:h-16 md:w-16 text-destructive mx-auto mb-6" />
-          <h2 className="text-2xl font-bold md:text-3xl mb-4">Invalid Order Link</h2>
+          <XCircle className="h-16 w-16 text-destructive mx-auto mb-6" />
+          <h2 className="text-3xl font-bold mb-4">Invalid Order Link</h2>
+          <p className="text-muted-foreground mb-6">The tracking link appears to be broken.</p>
           <Button size="lg" asChild>
             <Link to="/orders">Go to My Orders</Link>
           </Button>
@@ -114,6 +105,7 @@ export default function OrderTrackingPage() {
         <div className="space-y-8">
           <Skeleton className="h-32 rounded-2xl" />
           <Skeleton className="h-96 rounded-2xl" />
+          <Skeleton className="h-80 rounded-2xl" />
           <Skeleton className="h-64 rounded-2xl" />
         </div>
       </main>
@@ -124,8 +116,11 @@ export default function OrderTrackingPage() {
     return (
       <main className="min-h-screen flex items-center justify-center px-4 py-12 bg-muted/20">
         <Card className="w-full max-w-md text-center p-8 md:p-10">
-          <XCircle className="h-14 w-14 md:h-16 md:w-16 text-destructive mx-auto mb-6" />
-          <h2 className="text-2xl font-bold md:text-3xl mb-4">Order Not Found</h2>
+          <XCircle className="h-16 w-16 text-destructive mx-auto mb-6" />
+          <h2 className="text-3xl font-bold mb-4">Order Not Found</h2>
+          <p className="text-muted-foreground mb-6">
+            We couldn't find this order. It may have been removed or the link is incorrect.
+          </p>
           <Button size="lg" asChild>
             <Link to="/orders">My Orders</Link>
           </Button>
@@ -140,30 +135,29 @@ export default function OrderTrackingPage() {
   const isCancelled = ['cancelled', 'rejected'].includes(order.status);
   const shortId = order.shortId || order._id.slice(-6).toUpperCase();
 
+  // User can review only if: order delivered + no review yet + user is logged in
+  const canReview = isDelivered && !order.review && isAuthenticated;
+
   return (
     <main className="min-h-screen bg-gradient-to-b from-muted/20 to-background py-8 md:py-12">
-      <div className="container mx-auto px-4 max-w-4xl space-y-8 md:space-y-10">
-        {/* Header Status */}
+      <div className="container mx-auto px-4 max-w-4xl space-y-10">
+        {/* Header */}
         <header className="text-center">
           <div
-            className={`inline-flex items-center justify-center w-20 h-20 md:w-24 md:h-24 rounded-full mb-6 shadow-xl ${
-              isCancelled
-                ? 'bg-red-100'
-                : isDelivered
-                ? 'bg-green-100'
-                : 'bg-rose-100'
+            className={`inline-flex items-center justify-center w-24 h-24 rounded-full mb-8 shadow-2xl ${
+              isCancelled ? 'bg-red-100' : isDelivered ? 'bg-green-100' : 'bg-rose-100'
             }`}
           >
             {isCancelled ? (
-              <XCircle className="h-12 w-12 md:h-14 md:w-14 text-red-600" />
+              <XCircle className="h-14 w-14 text-red-600" />
             ) : isDelivered ? (
-              <CheckCircle className="h-12 w-12 md:h-14 md:w-14 text-green-600" />
+              <CheckCircle className="h-14 w-14 text-green-600" />
             ) : (
-              <Clock className="h-12 w-12 md:h-14 md:w-14 text-rose-600" />
+              <Clock className="h-14 w-14 text-rose-600" />
             )}
           </div>
 
-          <h1 className="text-3xl font-bold mb-3 md:text-4xl lg:text-5xl">
+          <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold mb-4">
             {isCancelled
               ? 'Order Cancelled'
               : isDelivered
@@ -171,47 +165,63 @@ export default function OrderTrackingPage() {
               : 'Order In Progress'}
           </h1>
 
-          <p className="text-lg text-muted-foreground mb-4 md:text-xl">
+          <p className="text-xl text-muted-foreground mb-6">
             Order <span className="font-mono font-bold text-rose-600">#{shortId}</span>
           </p>
 
           <Badge
-            className={`text-base md:text-lg px-6 py-2 ${ORDER_STATUS_COLORS[order.status]} text-white`}
+            className={`text-lg px-8 py-3 ${ORDER_STATUS_COLORS[order.status]} text-white font-medium`}
           >
             {ORDER_STATUS_LABELS[order.status]}
           </Badge>
         </header>
 
-        {/* Review CTA */}
-        {isDelivered && !order.review && (
-          <Card className="border-orange-500 bg-orange-50 shadow-xl">
-            <CardContent className="p-6 md:p-8 text-center space-y-5">
-              <Star className="h-14 w-14 md:h-16 md:w-16 text-orange-600 mx-auto" />
-              <h3 className="text-2xl font-bold md:text-3xl">How Was Your Order?</h3>
-              <p className="text-base text-muted-foreground md:text-lg">
-                Your feedback helps us improve and earns you loyalty points!
+        {/* Review CTA — Only for logged-in users */}
+        {canReview && (
+          <Card className="border-2 border-orange-500 bg-orange-50/80 shadow-2xl">
+            <CardContent className="p-8 text-center space-y-6">
+              <Star className="h-20 w-20 text-orange-600 mx-auto" />
+              <h3 className="text-3xl font-bold">How Was Your Experience?</h3>
+              <p className="text-lg text-muted-foreground max-w-md mx-auto">
+                Share your feedback to help us improve and earn loyalty points!
               </p>
               <Button
                 size="lg"
-                className="h-12 bg-orange-600 hover:bg-orange-700 text-base md:text-lg"
+                className="h-14 px-8 text-lg bg-orange-600 hover:bg-orange-700"
                 onClick={() => setReviewModalOpen(true)}
               >
-                <Star className="mr-2 h-5 w-5" />
+                <Star className="mr-3 h-6 w-6" />
                 Write a Review
               </Button>
             </CardContent>
           </Card>
         )}
 
+        {/* Message for guests on delivered orders */}
+        {isDelivered && !isAuthenticated && (
+          <Card className="border border-dashed border-muted-foreground/50 bg-muted/30">
+            <CardContent className="p-8 text-center space-y-4">
+              <LogIn className="h-12 w-12 text-muted-foreground mx-auto" />
+              <p className="text-lg text-muted-foreground">
+                Want to leave a review?{' '}
+                <Link to="/login" className="font-semibold text-rose-600 hover:underline">
+                  Log in
+                </Link>{' '}
+                to your account.
+              </p>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Progress Timeline */}
         {!isTerminal && (
-          <Card className="overflow-hidden shadow-xl">
-            <CardHeader className="pb-4">
-              <CardTitle className="text-xl md:text-2xl">Order Progress</CardTitle>
+          <Card className="overflow-hidden shadow-2xl">
+            <CardHeader>
+              <CardTitle className="text-2xl text-center">Order Progress</CardTitle>
             </CardHeader>
-            <CardContent className="p-6 md:p-8">
+            <CardContent className="p-8">
               <div className="relative">
-                <div className="grid grid-cols-5 gap-4">
+                <div className="grid grid-cols-5 gap-6">
                   {STEPS.map((step, i) => {
                     const Icon = step.icon;
                     const isActive = i <= currentStepIndex;
@@ -220,18 +230,18 @@ export default function OrderTrackingPage() {
                     return (
                       <div key={step.status} className="flex flex-col items-center">
                         <div
-                          className={`w-14 h-14 md:w-16 md:h-16 rounded-full flex items-center justify-center transition-all duration-500 shadow-md ${
+                          className={`w-16 h-16 rounded-full flex items-center justify-center transition-all duration-700 shadow-lg ${
                             isCompleted
                               ? 'bg-green-500 text-white'
                               : isActive
-                              ? 'bg-rose-600 text-white scale-110'
+                              ? 'bg-rose-600 text-white scale-125'
                               : 'bg-muted text-muted-foreground'
                           }`}
                         >
-                          <Icon className="h-7 w-7 md:h-8 md:w-8" />
+                          <Icon className="h-8 w-8" />
                         </div>
                         <p
-                          className={`mt-3 text-xs md:text-sm font-medium text-center ${
+                          className={`mt-4 text-sm font-medium text-center ${
                             isActive || isCompleted ? 'text-foreground' : 'text-muted-foreground'
                           }`}
                         >
@@ -242,9 +252,9 @@ export default function OrderTrackingPage() {
                   })}
                 </div>
 
-                <div className="absolute top-7 md:top-8 left-0 right-0 h-2 bg-muted -z-10">
+                <div className="absolute top-8 left-0 right-0 h-3 bg-muted -z-10 rounded-full">
                   <div
-                    className="h-full bg-rose-600 transition-all duration-700 ease-out rounded-full"
+                    className="h-full bg-gradient-to-r from-rose-600 to-rose-500 transition-all duration-1000 ease-out rounded-full"
                     style={{
                       width: `${(currentStepIndex / (STEPS.length - 1)) * 100}%`,
                     }}
@@ -256,26 +266,33 @@ export default function OrderTrackingPage() {
         )}
 
         {/* Order Items & Summary */}
-        <Card className="shadow-xl">
+        <Card className="shadow-2xl">
           <CardHeader>
-            <CardTitle className="text-xl md:text-2xl">Order Details</CardTitle>
+            <CardTitle className="text-2xl">Order Summary</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="space-y-5">
+          <CardContent className="space-y-8">
+            <div className="space-y-6">
               {order.items.map((item, index) => (
                 <div
                   key={item._id || index}
-                  className="flex items-center justify-between py-4 border-b last:border-0"
+                  className="flex justify-between items-center py-4 border-b last:border-0"
                 >
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-lg bg-rose-100 flex items-center justify-center text-rose-600 font-bold text-sm md:text-base">
+                  <div className="flex items-center gap-5">
+                    <div className="w-14 h-14 rounded-xl bg-rose-100 flex items-center justify-center text-rose-600 font-bold text-lg">
                       {item.quantity}
                     </div>
-                    <p className="font-medium text-base md:text-lg">
-                      {item.menuItem?.name || item.name || 'Item Unavailable'}
-                    </p>
+                    <div>
+                      <p className="font-semibold text-lg">
+                        {item.menuItem?.name || item.name || 'Item Unavailable'}
+                      </p>
+                      {item.addOns?.length > 0 && (
+                        <p className="text-sm text-muted-foreground mt-1">
+                          + {item.addOns.map((a) => a.name).join(', ')}
+                        </p>
+                      )}
+                    </div>
                   </div>
-                  <p className="font-medium text-base md:text-lg">
+                  <p className="font-semibold text-lg">
                     Rs. {formatPrice((item.priceAtOrder ?? 0) * item.quantity)}
                   </p>
                 </div>
@@ -284,7 +301,7 @@ export default function OrderTrackingPage() {
 
             <Separator />
 
-            <div className="space-y-4 text-base md:text-lg">
+            <div className="space-y-4 text-lg">
               <div className="flex justify-between">
                 <span>Subtotal</span>
                 <span>Rs. {formatPrice(order.totals?.totalAmount ?? 0)}</span>
@@ -294,19 +311,19 @@ export default function OrderTrackingPage() {
                 <span>Rs. {formatPrice(order.totals?.deliveryFee ?? 0)}</span>
               </div>
               {order.totals?.discountApplied > 0 && (
-                <div className="flex justify-between text-green-600 font-medium">
+                <div className="flex justify-between text-green-600 font-semibold">
                   <span>Discount</span>
                   <span>-Rs. {formatPrice(order.totals.discountApplied)}</span>
                 </div>
               )}
               {order.totals?.walletUsed > 0 && (
-                <div className="flex justify-between text-blue-600 font-medium">
+                <div className="flex justify-between text-blue-600 font-semibold">
                   <span>Wallet Used</span>
                   <span>-Rs. {formatPrice(order.totals.walletUsed)}</span>
                 </div>
               )}
-              <Separator />
-              <div className="flex justify-between text-2xl font-bold md:text-3xl">
+              <Separator className="my-6" />
+              <div className="flex justify-between text-3xl font-bold">
                 <span>Total Paid</span>
                 <span className="text-rose-600">
                   Rs. {formatPrice(order.totals?.finalAmount ?? 0)}
@@ -317,57 +334,54 @@ export default function OrderTrackingPage() {
         </Card>
 
         {/* Delivery Info */}
-        <Card className="shadow-xl">
+        <Card className="shadow-2xl">
           <CardHeader>
-            <CardTitle className="flex items-center gap-3 text-xl md:text-2xl">
-              <MapPin className="h-6 w-6" />
+            <CardTitle className="flex items-center gap-3 text-2xl">
+              <MapPin className="h-7 w-7" />
               Delivery Address
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-5">
-            <p className="text-base md:text-lg leading-relaxed">
+          <CardContent className="space-y-6">
+            <div className="text-lg leading-relaxed bg-muted/30 p-5 rounded-xl">
               {order.addressDetails?.fullAddress ||
                 order.address?.fullAddress ||
                 'Address not available'}
-            </p>
+            </div>
 
             {order.addressDetails?.floor && (
               <p className="text-muted-foreground">
-                Floor: {order.addressDetails.floor}
+                <strong>Floor/Unit:</strong> {order.addressDetails.floor}
               </p>
             )}
 
             {(order.instructions ||
               order.addressDetails?.instructions ||
               order.address?.instructions) && (
-              <p className="italic text-muted-foreground text-sm md:text-base">
-                Note: "
+              <div className="italic text-muted-foreground bg-amber-50 p-4 rounded-lg border border-amber-200">
+                <strong>Note:</strong>{' '}
                 {order.instructions ||
                   order.addressDetails?.instructions ||
                   order.address?.instructions}
-                "
-              </p>
+              </div>
             )}
 
             {order.rider && (
               <>
-                <Separator className="my-6" />
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6">
-                  <div className="flex items-center gap-4">
-                    <div className="w-16 h-16 rounded-full bg-rose-100 flex items-center justify-center">
-                      <Truck className="h-8 w-8 md:h-10 md:w-10 text-rose-600" />
+                <Separator className="my-8" />
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-8">
+                  <div className="flex items-center gap-6">
+                    <div className="w-20 h-20 rounded-full bg-rose-100 flex items-center justify-center shadow-lg">
+                      <Truck className="h-12 w-12 text-rose-600" />
                     </div>
                     <div>
-                      <p className="font-bold text-lg md:text-xl">{order.rider.name}</p>
-                      <p className="text-sm text-muted-foreground md:text-base">
-                        Your Delivery Partner
-                      </p>
+                      <p className="text-2xl font-bold">{order.rider.name}</p>
+                      <p className="text-muted-foreground text-lg">Your Delivery Partner</p>
                     </div>
                   </div>
 
-                  <Button size="lg" variant="secondary" asChild className="h-12">
+                  <Button size="lg" variant="secondary" asChild className="h-14 px-8 text-lg">
                     <a href={`tel:${order.rider.phone}`}>
-                      <Phone className="mr-2 h-5 w-5" />
+                      <Phone className="mr-3 h-6 w-6" />
                       Call Rider
                     </a>
                   </Button>
@@ -377,9 +391,9 @@ export default function OrderTrackingPage() {
           </CardContent>
         </Card>
 
-        {/* Action Buttons — Reorder available to ALL users */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pb-8">
-          <Button variant="outline" size="lg" asChild className="h-12">
+        {/* Action Buttons */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pb-12">
+          <Button variant="outline" size="lg" asChild className="h-14 text-lg">
             <Link to="/orders">My Orders</Link>
           </Button>
 
@@ -387,28 +401,30 @@ export default function OrderTrackingPage() {
             size="lg"
             onClick={handleReorder}
             disabled={reorderMutation.isPending || isCancelled}
-            className="h-12 bg-rose-600 hover:bg-rose-700 text-base md:text-lg"
+            className="h-14 text-lg bg-rose-600 hover:bg-rose-700"
           >
             {reorderMutation.isPending ? (
               <>
-                <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                <Loader2 className="mr-3 h-6 w-6 animate-spin" />
                 Adding to Cart...
               </>
             ) : (
               <>
-                <RotateCcw className="mr-2 h-5 w-5" />
+                <RotateCcw className="mr-3 h-6 w-6" />
                 Order Again
               </>
             )}
           </Button>
         </div>
 
-        {/* Review Modal */}
-        <SubmitReviewModal
-          orderId={order._id}
-          open={reviewModalOpen}
-          onOpenChange={setReviewModalOpen}
-        />
+        {/* Review Modal — Only mount when user is authenticated */}
+        {isAuthenticated && (
+          <SubmitReviewModal
+            orderId={order._id}
+            open={reviewModalOpen}
+            onOpenChange={setReviewModalOpen}
+          />
+        )}
       </div>
     </main>
   );

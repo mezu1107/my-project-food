@@ -1,14 +1,13 @@
 // src/pages/Home.tsx
-// PRODUCTION VERSION — January 07, 2026
+// PRODUCTION VERSION — January 09, 2026
 // Fully responsive, high-contrast, accessible, modern homepage with authentic Pakistani color harmony
 
 import { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Link } from "react-router-dom";
-import { ArrowRight, Star, AlertTriangle, Package } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
 import { MenuItemCard } from "@/features/menu/components/MenuItemCard";
 import { useFullMenuCatalog } from "@/features/menu/hooks/useMenuApi";
 import {
@@ -17,15 +16,14 @@ import {
   CATEGORY_ICONS,
 } from "@/features/menu/types/menu.types";
 
-import { useTopReviews } from "@/features/reviews/hooks/useTopReviews";
-import ReviewCard from "@/features/reviews/components/ReviewCard";
+import HomeTopReviews from "@/features/reviews/components/HomeTopReviews"; // ← NEW IMPORT
 
 type HomeProps = {
   openAreaChecker?: () => void;
 };
 
 export const Home = ({ openAreaChecker }: HomeProps = {}) => {
-  const { data: menuData, isLoading: menuLoading, isError: menuError } = useFullMenuCatalog();
+  const { data: menuData, isLoading: menuLoading } = useFullMenuCatalog();
   const allItems = menuData?.menu ?? [];
 
   const featuredNames = useMemo(
@@ -87,14 +85,6 @@ export const Home = ({ openAreaChecker }: HomeProps = {}) => {
     return () => clearInterval(interval);
   }, []);
 
-  const {
-    data: reviewsData,
-    isLoading: reviewsLoading,
-    isError: reviewsError,
-  } = useTopReviews({ limit: 6 });
-
-  const reviews = reviewsData?.reviews ?? [];
-
   return (
     <main className="min-h-screen bg-background">
       {/* ================= HERO ================= */}
@@ -114,7 +104,7 @@ export const Home = ({ openAreaChecker }: HomeProps = {}) => {
         >
           <img
             src="/Chicken-Karahi.jpg"
-            alt="Authentic Chicken Karahi"
+            alt="Authentic Pakistani Chicken Karahi with rich gravy and fresh coriander"
             className="w-80 lg:w-96 2xl:w-[500px] rounded-3xl shadow-2xl border-8 border-white/90 rotate-[-12deg] hover:rotate-[-8deg] transition-transform duration-700"
           />
         </motion.div>
@@ -127,7 +117,7 @@ export const Home = ({ openAreaChecker }: HomeProps = {}) => {
         >
           <img
             src="https://www.shutterstock.com/image-photo/hyderabadi-chicken-biryani-aromatic-flavorful-600nw-2497040151.jpg"
-            alt="Special Masala Biryani"
+            alt="Fragrant Hyderabadi Chicken Biryani with layered rice and tender meat"
             className="w-72 lg:w-80 xl:w-96 2xl:w-[480px] rounded-3xl shadow-2xl border-8 border-white/80 rotate-12 hover:rotate-[6deg] transition-transform duration-700"
           />
         </motion.div>
@@ -247,54 +237,31 @@ export const Home = ({ openAreaChecker }: HomeProps = {}) => {
           </p>
         </motion.div>
 
-        {/* ... (menu loading states unchanged for brevity) ... */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-10">
+          {featuredItems.map((item, index) => (
+            <motion.div
+              key={item._id}
+              initial={{ opacity: 0, y: 50 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ delay: index * 0.12 }}
+            >
+              <MenuItemCard item={item} />
+            </motion.div>
+          ))}
+        </div>
 
-        <>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-10">
-            {featuredItems.map((item, index) => (
-              <motion.div
-                key={item._id}
-                initial={{ opacity: 0, y: 50 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: index * 0.12 }}
-              >
-                <MenuItemCard item={item} />
-              </motion.div>
-            ))}
-          </div>
-
-          <div className="text-center mt-16">
-            <Button size="lg" asChild className="px-14 py-8 text-lg rounded-2xl shadow-xl bg-amber-600 hover:bg-amber-700">
-              <Link to="/menu">
-                View Full Menu <ArrowRight className="ml-4 h-6 w-6" />
-              </Link>
-            </Button>
-          </div>
-        </>
+        <div className="text-center mt-16">
+          <Button size="lg" asChild className="px-14 py-8 text-lg rounded-2xl shadow-xl bg-amber-600 hover:bg-amber-700">
+            <Link to="/menu">
+              View Full Menu <ArrowRight className="ml-4 h-6 w-6" />
+            </Link>
+          </Button>
+        </div>
       </section>
 
       {/* ================= REAL CUSTOMER REVIEWS ================= */}
-      <section className="bg-gradient-to-b from-orange-50 to-amber-50 py-20 lg:py-32">
-        {/* ... (reviews section unchanged except subtle text color improvements) ... */}
-        <div className="container mx-auto px-4">
-          <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="text-center mb-16"
-          >
-            <h2 className="text-4xl md:text-5xl font-bold text-gray-900 mb-4">
-              What Our Customers Say
-            </h2>
-            <p className="text-lg text-gray-700 max-w-3xl mx-auto">
-              Real reviews from happy foodies who’ve tasted our authentic Pakistani dishes
-            </p>
-          </motion.div>
-
-          {/* Reviews grid unchanged — your ReviewCard will inherit the warm background nicely */}
-        </div>
-      </section>
+      <HomeTopReviews />
 
       {/* ================= FINAL CTA ================= */}
       <section className="container mx-auto px-4 py-20 lg:py-32 text-center">

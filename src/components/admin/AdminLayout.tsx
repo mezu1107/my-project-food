@@ -44,8 +44,8 @@ const navItems = [
   { icon: ShoppingBag, label: "Orders", path: "/admin/orders" },
   { icon: Package, label: "Orders Page", path: "/admin/ordersPage" },
   { icon: Users, label: "Customers", path: "/admin/customers" },
-  { icon: Bike, label: "Riders", path: "/admin/riders" },
-  { icon: Tag, label: "Deals & Offers", path: "/admin/deals" },
+  // { icon: Bike, label: "Riders", path: "/admin/riders" },
+  // { icon: Tag, label: "Deals & Offers", path: "/admin/deals" },
   { icon: MapPin, label: "Delivery Areas", path: "/admin/areas" },
   { icon: UtensilsCrossed, label: "Menu Items", path: "/admin/menu" },
   { icon: Star, label: "Reviews", path: "/admin/reviews" },
@@ -53,8 +53,11 @@ const navItems = [
   { icon: MessageSquare, label: "Contact Messages", path: "/admin/contact" },
   { icon: UserPlus, label: "Staff Promote", path: "/admin/staff" },
   { icon: Box, label: "Inventory Management", path: "/admin/inventory" },
-  { icon: Clipboard, label: "Kitchen Display", path: "/admin/kitchen" },
+  // { icon: Monitor, label: "Kitchen Display", path: "/kitchen/display" },
+  { icon: Clipboard, label: "Kitchen Dashboard", path: "/kitchen" },
 ];
+
+
 
 
   const currentPageTitle =

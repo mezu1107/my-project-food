@@ -1,8 +1,6 @@
 // src/features/orders/pages/OrdersPage.tsx
-// PRODUCTION-READY — DECEMBER 29, 2025
-// Full unit display, enriched add-ons, review CTA, real-time updates
-// Fixed: validateDOMNesting warning (Badge inside <p>)
-// Responsive, mobile-first, professional design
+// PRODUCTION-READY — JANUARY 09, 2026
+// Fixed: Review CTA & badge only shown when order is delivered AND not yet reviewed
 
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -49,10 +47,12 @@ import SubmitReviewModal from '@/features/reviews/components/SubmitReviewModal';
 // Order Card Component
 // ------------------------------
 const OrderCard: React.FC<{ order: Order }> = ({ order }) => {
-  const items = order.items || [];
   const [reviewModalOpen, setReviewModalOpen] = useState(false);
-  const isDeliveredAndNotReviewed = order.status === 'delivered' && !order.review;
 
+  // Only allow review if: delivered + no review exists
+  const canReview = order.status === 'delivered' && !order.review;
+
+  const items = order.items || [];
   const shortId = order.shortId || `#${order._id.slice(-6).toUpperCase()}`;
 
   return (
@@ -74,9 +74,12 @@ const OrderCard: React.FC<{ order: Order }> = ({ order }) => {
                 >
                   {ORDER_STATUS_LABELS[order.status]}
                 </Badge>
-                {isDeliveredAndNotReviewed && (
+
+                {/* Only show "Review Pending" badge if review is possible */}
+                {canReview && (
                   <Badge variant="outline" className="border-orange-600 text-orange-600 flex items-center gap-1.5">
-                    <Star className="h-4 w-4" /> Review Pending
+                    <Star className="h-4 w-4" />
+                    Review Pending
                   </Badge>
                 )}
               </div>
@@ -93,7 +96,6 @@ const OrderCard: React.FC<{ order: Order }> = ({ order }) => {
                       {item.quantity}x
                     </div>
                     <div className="space-y-2">
-                      {/* FIXED: No more <div> inside <p> */}
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-medium text-base md:text-lg">
                           {item.name}
@@ -103,7 +105,6 @@ const OrderCard: React.FC<{ order: Order }> = ({ order }) => {
                         </Badge>
                       </div>
 
-                      {/* Enriched add-ons with units */}
                       {item.addOns?.length > 0 && (
                         <div className="mt-1 space-y-1 text-xs sm:text-sm text-muted-foreground">
                           {item.addOns.map((addon) => (
@@ -147,11 +148,11 @@ const OrderCard: React.FC<{ order: Order }> = ({ order }) => {
               <ChevronRight className="h-7 w-7 text-muted-foreground" />
             </div>
 
-            {/* Review Button */}
-            {isDeliveredAndNotReviewed && (
+            {/* Review Button — Only if canReview */}
+            {canReview && (
               <div className="mt-6">
                 <Button
-                  className="w-full bg-orange-600 hover:bg-orange-700 text-base"
+                  className="w-full bg-orange-600 hover:bg-orange-700 text-base h-12"
                   onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
@@ -167,17 +168,20 @@ const OrderCard: React.FC<{ order: Order }> = ({ order }) => {
         </Card>
       </Link>
 
-      <SubmitReviewModal
-        orderId={order._id}
-        open={reviewModalOpen}
-        onOpenChange={setReviewModalOpen}
-      />
+      {/* Modal — Only render if user can review (prevents unnecessary mount) */}
+      {canReview && (
+        <SubmitReviewModal
+          orderId={order._id}
+          open={reviewModalOpen}
+          onOpenChange={setReviewModalOpen}
+        />
+      )}
     </>
   );
 };
 
 // ------------------------------
-// Guest Tracker Component
+// Guest Tracker Component (unchanged)
 // ------------------------------
 const GuestTracker: React.FC = () => {
   const [phone, setPhone] = useState('');

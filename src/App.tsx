@@ -1,10 +1,10 @@
 // src/App.tsx
-// FINAL PRODUCTION — January 07, 2026
+// PRODUCTION-READY — JANUARY 09, 2026
 // Complete routing for Al Tawakkal Foods Pakistan
-// Using React Router Data API (createBrowserRouter) with v7 future flags
+// Kitchen Dashboard now fully integrated as primary kitchen display
 
 import { Toaster } from "@/components/ui/toaster";
-import { Toaster as Sonner, toast } from "sonner";
+import { Toaster as Sonner } from "sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { HelmetProvider } from "react-helmet-async";
@@ -21,7 +21,7 @@ import { PublicLayout } from "./components/PublicLayout";
 import AdminLayout from "./components/admin/AdminLayout";
 import RiderLayout from "./components/rider/RiderLayout";
 import { KitchenLayout } from "./components/KitchenLayout";
-
+import KitchenDisplay from "./pages/kitchen/KitchenDisplay";
 // Public Pages
 import Index from "./pages/Index";
 import Home from "./pages/Home";
@@ -79,9 +79,9 @@ import AdminOrdersPage from "@/pages/admin/orders/AdminOrdersPage";
 import CustomerReviewsPage from "./features/reviews/pages/CustomerReviewsPage";
 import AdminReviewsDashboard from "./features/reviews/pages/AdminReviewsDashboard";
 
-// Kitchen
+// Kitchen — ONLY THE BEST ONE
 import KitchenDashboard from "./pages/kitchen/KitchenDashboard";
-import KitchenDisplay from "./pages/kitchen/KitchenDisplay";
+// Removed: KitchenDisplay (outdated) — no longer needed
 
 // Debug
 import DebugAPI from "./pages/DebugAPI";
@@ -89,24 +89,20 @@ import DebugAPI from "./pages/DebugAPI";
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 5 * 60 * 1000, // 5 minutes
+      staleTime: 5 * 60 * 1000,
       retry: 1,
       refetchOnWindowFocus: false,
     },
   },
 });
 
-// Define router with v7 future flags to silence deprecation warnings
 const router = createBrowserRouter(
   [
     {
       element: <PublicLayout />,
       children: [
         { path: "/", element: <Index /> },
-        {
-          path: "/home",
-          element: <Home />, // openAreaChecker will be passed via context or props if needed
-        },
+        { path: "/home", element: <Home /> },
 
         // Menu
         { path: "/menu", element: <MenuPage /> },
@@ -172,26 +168,29 @@ const router = createBrowserRouter(
         { path: "inventory", element: <InventoryList /> },
         { path: "analytics", element: <AnalyticsPage /> },
         { path: "reviews", element: <AdminReviewsDashboard /> },
-        { path: "kitchen", element: <KitchenDisplay /> },
+        // REMOVED: { path: "kitchen", element: <KitchenDisplay /> }
+        // Admins now access the full kitchen dashboard via sidebar link to /kitchen
       ],
     },
 
-    // Kitchen Dashboard (Separate Layout)
-    {
-      path: "/kitchen",
-      element: <KitchenLayout />,
-      children: [
-        { index: true, element: <KitchenDashboard /> },
-      ],
+    // Dedicated Full-Screen Kitchen Dashboard
+    // Dedicated Full-Screen Kitchen Dashboard
+{
+  path: "/kitchen",
+  element: <KitchenLayout />,
+  children: [
+    { index: true, element: <KitchenDashboard /> },
+    { path: "display", element: <KitchenDisplay /> },
+  ],
+
+
     },
 
     // Rider (Future)
     {
       path: "/rider",
       element: <RiderLayout />,
-      children: [
-        // Add rider routes later
-      ],
+      children: [],
     },
 
     // 404
@@ -199,10 +198,7 @@ const router = createBrowserRouter(
       path: "*",
       element: <NotFound />,
     },
-  ],
-  {
-    
-  }
+  ]
 );
 
 export default function App() {
@@ -214,7 +210,6 @@ export default function App() {
           <Sonner />
 
           <SocketProvider>
-            {/* Replace BrowserRouter + Routes with RouterProvider */}
             <RouterProvider router={router} />
           </SocketProvider>
         </TooltipProvider>

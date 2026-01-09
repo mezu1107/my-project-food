@@ -1,4 +1,6 @@
 // src/features/kitchen/components/KitchenOrderCard.tsx
+// PRODUCTION-READY — JANUARY 09, 2026
+// Fixed: Safe access to order.order.paymentMethod & finalAmount (null-safe)
 
 import {
   KitchenOrderPopulated,
@@ -49,6 +51,10 @@ export default function KitchenOrderCard({
   } as const;
 
   const config = STATUS_CONFIG[order.status];
+
+  // Safe access to nested order data
+  const paymentMethod = order.order?.paymentMethod || 'Unknown';
+  const finalAmount = Number(order.order?.finalAmount || 0);
 
   return (
     <div
@@ -164,14 +170,14 @@ export default function KitchenOrderCard({
           })}
         </div>
 
-        {/* Footer */}
+        {/* Footer — Now SAFE from null crashes */}
         <div className="flex flex-col sm:flex-row justify-between items-center gap-4 pt-4 border-t">
           <div className="text-center sm:text-left">
             <p className="text-xs text-gray-600 uppercase">
-              {order.order.paymentMethod} Payment
+              {paymentMethod.toUpperCase()} Payment
             </p>
             <p className="text-lg font-bold text-gray-900">
-              Rs. {order.order.finalAmount.toLocaleString()}
+              Rs. {finalAmount.toLocaleString()}
             </p>
           </div>
 
