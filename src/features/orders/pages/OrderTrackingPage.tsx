@@ -1,23 +1,26 @@
 // src/features/orders/pages/OrderTrackingPage.tsx
-// PRODUCTION-READY — JANUARY 09, 2026
-// REVIEW CTA: Only shown to authenticated users (via Zustand auth store)
+// FINAL PRODUCTION — JANUARY 12, 2026
+// Modern, guest-friendly real-time tracking page with animations, confetti, sounds
+// Full support: live status, rider location, notification center, reorder & review
 
+import { useEffect, useMemo, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { useState } from 'react';
 import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
+  CardDescription,
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
+import confetti from 'canvas-confetti';
 
 import {
-  CheckCircle,
+  CheckCircle2,
   Clock,
   ChefHat,
   Truck,
@@ -29,70 +32,92 @@ import {
   Star,
   Loader2,
   LogIn,
+  AlertCircle,
 } from 'lucide-react';
 
 import { useTrackOrder, useReorder } from '@/features/orders/hooks/useOrders';
 import { useOrderSocket } from '@/features/orders/hooks/useOrderSocket';
-import { useAuthStore } from '@/features/auth/store/authStore'; // ← Correct import
+import { useGlobalOrderNotifications } from '@/features/orders/hooks/useGlobalOrderNotifications';
+import { useAuthStore } from '@/features/auth/store/authStore';
+import { useNotificationStore, audioManager } from '@/features/notifications/store/notificationStore';
 
 import {
   ORDER_STATUS_LABELS,
   ORDER_STATUS_COLORS,
+  OrderStatus,
 } from '@/types/order.types';
 
 import SubmitReviewModal from '@/features/reviews/components/SubmitReviewModal';
 
 const STEPS = [
-  { status: 'pending', icon: Clock, label: 'Order Received' },
-  { status: 'confirmed', icon: CheckCircle, label: 'Confirmed' },
+  { status: 'pending', icon: Clock, label: 'Received' },
+  { status: 'confirmed', icon: CheckCircle2, label: 'Confirmed' },
   { status: 'preparing', icon: ChefHat, label: 'Preparing' },
   { status: 'out_for_delivery', icon: Truck, label: 'On the Way' },
   { status: 'delivered', icon: Package, label: 'Delivered' },
 ] as const;
 
-const formatPrice = (amount: number | undefined): string => {
-  if (typeof amount !== 'number' || isNaN(amount)) return '0';
-  return amount.toLocaleString('en-PK');
-};
+const formatPrice = (amount: number | undefined): string =>
+  typeof amount === 'number' && !isNaN(amount) ? amount.toLocaleString('en-PK') : '0';
 
 export default function OrderTrackingPage() {
   const { orderId } = useParams<{ orderId: string }>();
   const navigate = useNavigate();
 
-  // Get auth state from Zustand
-  const { user, token } = useAuthStore();
-  const isAuthenticated = !!user && !!token;
+  const { user, isAuthenticated } = useAuthStore();
+  const { addNotification } = useNotificationStore();
 
   const { data: response, isLoading, error } = useTrackOrder(orderId);
   const reorderMutation = useReorder();
 
   const [reviewModalOpen, setReviewModalOpen] = useState(false);
+  const [riderLocation, setRiderLocation] = useState<{ lat: number; lng: number } | null>(null);
 
   const order = response?.order;
+  const shortId = order?.shortId || order?._id?.slice(-6)?.toUpperCase() || '—';
 
-  // Real-time updates
+  // Real-time socket + global notifications
   useOrderSocket(orderId);
+  useGlobalOrderNotifications();
+
+  // Confetti on delivery + sound
+  useEffect(() => {
+    if (order?.status === 'delivered') {
+      audioManager.play('delivered', { volume: 0.8 });
+      confetti({
+        particleCount: 180,
+        spread: 100,
+        origin: { y: 0.6 },
+        colors: ['#f97316', '#fb923c', '#fdba74', '#fed7aa', '#fef3c7'],
+      });
+    }
+  }, [order?.status]);
 
   const handleReorder = async () => {
     if (!orderId) return;
     try {
       await reorderMutation.mutateAsync(orderId);
-      toast.success('Items added to cart! 🎉');
-      setTimeout(() => navigate('/cart'), 800);
+      toast.success('Items added back to cart!', {
+        description: 'Head to cart to place the order again.',
+      });
+      setTimeout(() => navigate('/cart'), 1200);
     } catch {
-      // Error handled in hook
+      // Error already handled in hook
     }
   };
 
+  // Invalid order ID
   if (!orderId) {
     return (
-      <main className="min-h-screen flex items-center justify-center px-4 py-12 bg-muted/20">
-        <Card className="w-full max-w-md text-center p-8 md:p-10">
-          <XCircle className="h-16 w-16 text-destructive mx-auto mb-6" />
-          <h2 className="text-3xl font-bold mb-4">Invalid Order Link</h2>
-          <p className="text-muted-foreground mb-6">The tracking link appears to be broken.</p>
-          <Button size="lg" asChild>
-            <Link to="/orders">Go to My Orders</Link>
+      <main className="min-h-screen flex items-center justify-center bg-gradient-to-b from-red-50/30 to-background px-4 py-12">
+        <Card className="w-full max-w-lg text-center p-10 shadow-2xl border-red-200">
+          <XCircle className="h-20 w-20 text-red-600 mx-auto mb-6" />
+          <h2 className="text-4xl font-bold text-red-700 mb-4">Invalid Tracking Link</h2>
+          <p className="text-lg text-muted-foreground mb-8">
+            The link you followed seems to be broken or expired.
+          </p>
+          <Button size="lg" className="h-14 px-10 text-lg" asChild>
+            <Link to={isAuthenticated ? '/orders' : '/'}>Go Back</Link>
           </Button>
         </Card>
       </main>
@@ -101,12 +126,11 @@ export default function OrderTrackingPage() {
 
   if (isLoading) {
     return (
-      <main className="container mx-auto px-4 py-8 md:py-12 max-w-4xl">
-        <div className="space-y-8">
-          <Skeleton className="h-32 rounded-2xl" />
-          <Skeleton className="h-96 rounded-2xl" />
-          <Skeleton className="h-80 rounded-2xl" />
-          <Skeleton className="h-64 rounded-2xl" />
+      <main className="container mx-auto px-4 py-8 md:py-12 max-w-5xl">
+        <div className="space-y-10">
+          <Skeleton className="h-40 rounded-3xl" />
+          <Skeleton className="h-96 rounded-3xl" />
+          <Skeleton className="h-80 rounded-3xl" />
         </div>
       </main>
     );
@@ -114,15 +138,15 @@ export default function OrderTrackingPage() {
 
   if (error || !order) {
     return (
-      <main className="min-h-screen flex items-center justify-center px-4 py-12 bg-muted/20">
-        <Card className="w-full max-w-md text-center p-8 md:p-10">
-          <XCircle className="h-16 w-16 text-destructive mx-auto mb-6" />
-          <h2 className="text-3xl font-bold mb-4">Order Not Found</h2>
-          <p className="text-muted-foreground mb-6">
-            We couldn't find this order. It may have been removed or the link is incorrect.
+      <main className="min-h-screen flex items-center justify-center bg-gradient-to-b from-amber-50/30 to-background px-4 py-12">
+        <Card className="w-full max-w-lg text-center p-10 shadow-2xl border-amber-200">
+          <AlertCircle className="h-20 w-20 text-amber-600 mx-auto mb-6" />
+          <h2 className="text-4xl font-bold text-amber-800 mb-4">Order Not Found</h2>
+          <p className="text-lg text-muted-foreground mb-8">
+            This order doesn't exist or the tracking link is no longer valid.
           </p>
-          <Button size="lg" asChild>
-            <Link to="/orders">My Orders</Link>
+          <Button size="lg" className="h-14 px-10 text-lg" asChild>
+            <Link to={isAuthenticated ? '/orders' : '/'}>Go Back</Link>
           </Button>
         </Card>
       </main>
@@ -133,116 +157,130 @@ export default function OrderTrackingPage() {
   const isTerminal = ['delivered', 'cancelled', 'rejected'].includes(order.status);
   const isDelivered = order.status === 'delivered';
   const isCancelled = ['cancelled', 'rejected'].includes(order.status);
-  const shortId = order.shortId || order._id.slice(-6).toUpperCase();
-
-  // User can review only if: order delivered + no review yet + user is logged in
   const canReview = isDelivered && !order.review && isAuthenticated;
 
   return (
-    <main className="min-h-screen bg-gradient-to-b from-muted/20 to-background py-8 md:py-12">
-      <div className="container mx-auto px-4 max-w-4xl space-y-10">
-        {/* Header */}
-        <header className="text-center">
+    <main className="min-h-screen bg-gradient-to-b from-orange-50/20 to-background py-8 md:py-12">
+      <div className="container mx-auto px-4 max-w-5xl space-y-12">
+        {/* Header Section */}
+        <header className="text-center space-y-6">
           <div
-            className={`inline-flex items-center justify-center w-24 h-24 rounded-full mb-8 shadow-2xl ${
-              isCancelled ? 'bg-red-100' : isDelivered ? 'bg-green-100' : 'bg-rose-100'
+            className={`inline-flex items-center justify-center w-28 h-28 rounded-full mb-4 shadow-2xl transform transition-all duration-700 ${
+              isCancelled ? 'bg-red-100 rotate-12' : isDelivered ? 'bg-green-100 scale-110' : 'bg-orange-100'
             }`}
           >
             {isCancelled ? (
-              <XCircle className="h-14 w-14 text-red-600" />
+              <XCircle className="h-16 w-16 text-red-600" />
             ) : isDelivered ? (
-              <CheckCircle className="h-14 w-14 text-green-600" />
+              <CheckCircle2 className="h-16 w-16 text-green-600" />
             ) : (
-              <Clock className="h-14 w-14 text-rose-600" />
+              <Clock className="h-16 w-16 text-orange-600" />
             )}
           </div>
 
-          <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold mb-4">
+          <h1 className="text-4xl md:text-6xl font-extrabold bg-gradient-to-r from-orange-600 to-amber-600 bg-clip-text text-transparent">
             {isCancelled
               ? 'Order Cancelled'
               : isDelivered
-              ? 'Order Delivered!'
+              ? 'Delivered Successfully!'
               : 'Order In Progress'}
           </h1>
 
-          <p className="text-xl text-muted-foreground mb-6">
-            Order <span className="font-mono font-bold text-rose-600">#{shortId}</span>
+          <p className="text-xl md:text-2xl text-muted-foreground">
+            Order <span className="font-mono font-bold text-orange-700">#{shortId}</span>
           </p>
 
           <Badge
-            className={`text-lg px-8 py-3 ${ORDER_STATUS_COLORS[order.status]} text-white font-medium`}
+            variant="outline"
+            className={`text-lg px-8 py-3 font-semibold ${ORDER_STATUS_COLORS[order.status as OrderStatus]} border-2`}
           >
-            {ORDER_STATUS_LABELS[order.status]}
+            {ORDER_STATUS_LABELS[order.status as OrderStatus] || 'Processing'}
           </Badge>
         </header>
 
-        {/* Review CTA — Only for logged-in users */}
+        {/* Review Prompt (Delivered + Logged In) */}
         {canReview && (
-          <Card className="border-2 border-orange-500 bg-orange-50/80 shadow-2xl">
-            <CardContent className="p-8 text-center space-y-6">
-              <Star className="h-20 w-20 text-orange-600 mx-auto" />
-              <h3 className="text-3xl font-bold">How Was Your Experience?</h3>
-              <p className="text-lg text-muted-foreground max-w-md mx-auto">
-                Share your feedback to help us improve and earn loyalty points!
+          <Card className="border-2 border-orange-500 bg-gradient-to-br from-orange-50 to-amber-50 shadow-2xl">
+            <CardContent className="p-10 text-center space-y-6">
+              <Star className="h-24 w-24 text-orange-600 mx-auto animate-pulse" />
+              <h3 className="text-4xl font-bold text-orange-800">How Was Your Food?</h3>
+              <p className="text-xl text-orange-700/80 max-w-2xl mx-auto">
+                Your feedback helps us serve you better and earns you loyalty points!
               </p>
               <Button
                 size="lg"
-                className="h-14 px-8 text-lg bg-orange-600 hover:bg-orange-700"
+                className="h-16 px-12 text-xl bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-700 hover:to-amber-700 shadow-xl"
                 onClick={() => setReviewModalOpen(true)}
               >
-                <Star className="mr-3 h-6 w-6" />
+                <Star className="mr-4 h-7 w-7" />
                 Write a Review
               </Button>
             </CardContent>
           </Card>
         )}
 
-        {/* Message for guests on delivered orders */}
+        {/* Guest Review Prompt */}
         {isDelivered && !isAuthenticated && (
-          <Card className="border border-dashed border-muted-foreground/50 bg-muted/30">
-            <CardContent className="p-8 text-center space-y-4">
-              <LogIn className="h-12 w-12 text-muted-foreground mx-auto" />
-              <p className="text-lg text-muted-foreground">
-                Want to leave a review?{' '}
-                <Link to="/login" className="font-semibold text-rose-600 hover:underline">
-                  Log in
-                </Link>{' '}
-                to your account.
+          <Card className="border-dashed border-2 border-orange-300 bg-orange-50/40">
+            <CardContent className="p-10 text-center space-y-6">
+              <LogIn className="h-20 w-20 text-orange-600 mx-auto" />
+              <h3 className="text-3xl font-bold text-orange-800">Loved Your Meal?</h3>
+              <p className="text-xl text-orange-700/80">
+                Log in to leave a review and earn loyalty points next time!
               </p>
+              <Button
+                size="lg"
+                variant="outline"
+                className="h-14 px-10 text-lg border-orange-500 text-orange-700 hover:bg-orange-50"
+                asChild
+              >
+                <Link to="/login">Login to Review</Link>
+              </Button>
             </CardContent>
           </Card>
         )}
 
-        {/* Progress Timeline */}
+        {/* Live Progress Timeline (only when not terminal) */}
         {!isTerminal && (
-          <Card className="overflow-hidden shadow-2xl">
-            <CardHeader>
-              <CardTitle className="text-2xl text-center">Order Progress</CardTitle>
+          <Card className="overflow-hidden shadow-2xl border-orange-200/50">
+            <CardHeader className="bg-gradient-to-r from-orange-50 to-amber-50 dark:from-gray-900">
+              <CardTitle className="text-3xl text-center">Live Progress</CardTitle>
             </CardHeader>
-            <CardContent className="p-8">
+            <CardContent className="p-8 md:p-12">
               <div className="relative">
-                <div className="grid grid-cols-5 gap-6">
+                {/* Connecting Line */}
+                <div className="absolute top-10 left-0 right-0 h-4 bg-orange-100 dark:bg-orange-950 rounded-full -z-10" />
+
+                {/* Progress Fill */}
+                <div
+                  className="absolute top-10 left-0 h-4 bg-gradient-to-r from-orange-500 to-amber-500 rounded-full transition-all duration-1000 ease-out"
+                  style={{
+                    width: `${(currentStepIndex / (STEPS.length - 1)) * 100}%`,
+                  }}
+                />
+
+                <div className="grid grid-cols-5 gap-4 md:gap-6">
                   {STEPS.map((step, i) => {
                     const Icon = step.icon;
                     const isActive = i <= currentStepIndex;
                     const isCompleted = i < currentStepIndex;
 
                     return (
-                      <div key={step.status} className="flex flex-col items-center">
+                      <div key={step.status} className="flex flex-col items-center relative">
                         <div
-                          className={`w-16 h-16 rounded-full flex items-center justify-center transition-all duration-700 shadow-lg ${
+                          className={`w-20 h-20 md:w-24 md:h-24 rounded-full flex items-center justify-center shadow-xl transition-all duration-700 ${
                             isCompleted
-                              ? 'bg-green-500 text-white'
+                              ? 'bg-green-500 text-white scale-105'
                               : isActive
-                              ? 'bg-rose-600 text-white scale-125'
-                              : 'bg-muted text-muted-foreground'
+                              ? 'bg-orange-600 text-white scale-125 ring-8 ring-orange-300/50 animate-pulse'
+                              : 'bg-gray-200 text-gray-500 dark:bg-gray-800'
                           }`}
                         >
-                          <Icon className="h-8 w-8" />
+                          <Icon className="h-10 w-10 md:h-12 md:w-12" />
                         </div>
                         <p
-                          className={`mt-4 text-sm font-medium text-center ${
-                            isActive || isCompleted ? 'text-foreground' : 'text-muted-foreground'
+                          className={`mt-4 text-sm md:text-base font-medium text-center ${
+                            isActive || isCompleted ? 'text-foreground font-semibold' : 'text-muted-foreground'
                           }`}
                         >
                           {step.label}
@@ -251,22 +289,13 @@ export default function OrderTrackingPage() {
                     );
                   })}
                 </div>
-
-                <div className="absolute top-8 left-0 right-0 h-3 bg-muted -z-10 rounded-full">
-                  <div
-                    className="h-full bg-gradient-to-r from-rose-600 to-rose-500 transition-all duration-1000 ease-out rounded-full"
-                    style={{
-                      width: `${(currentStepIndex / (STEPS.length - 1)) * 100}%`,
-                    }}
-                  />
-                </div>
               </div>
             </CardContent>
           </Card>
         )}
 
-        {/* Order Items & Summary */}
-        <Card className="shadow-2xl">
+        {/* Order Summary */}
+      <Card className="shadow-2xl">
           <CardHeader>
             <CardTitle className="text-2xl">Order Summary</CardTitle>
           </CardHeader>
@@ -333,55 +362,57 @@ export default function OrderTrackingPage() {
           </CardContent>
         </Card>
 
-        {/* Delivery Info */}
+
+
+        {/* Delivery & Rider Info */}
         <Card className="shadow-2xl">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-3 text-2xl">
-              <MapPin className="h-7 w-7" />
-              Delivery Address
+          <CardHeader className="bg-gradient-to-r from-orange-50 to-amber-50 dark:from-gray-900">
+            <CardTitle className="text-3xl flex items-center gap-4">
+              <MapPin className="h-10 w-10 text-orange-600" />
+              Delivery Details
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="text-lg leading-relaxed bg-muted/30 p-5 rounded-xl">
-              {order.addressDetails?.fullAddress ||
-                order.address?.fullAddress ||
-                'Address not available'}
-            </div>
-
-            {order.addressDetails?.floor && (
-              <p className="text-muted-foreground">
-                <strong>Floor/Unit:</strong> {order.addressDetails.floor}
+          <CardContent className="pt-8 space-y-10">
+            <div className="bg-muted/40 p-6 md:p-8 rounded-2xl border border-orange-200/50">
+              <p className="text-xl leading-relaxed">
+                {order.addressDetails?.fullAddress || 'Address not available'}
               </p>
-            )}
-
-            {(order.instructions ||
-              order.addressDetails?.instructions ||
-              order.address?.instructions) && (
-              <div className="italic text-muted-foreground bg-amber-50 p-4 rounded-lg border border-amber-200">
-                <strong>Note:</strong>{' '}
-                {order.instructions ||
-                  order.addressDetails?.instructions ||
-                  order.address?.instructions}
-              </div>
-            )}
+              {order.addressDetails?.floor && (
+                <p className="mt-4 text-lg text-muted-foreground">
+                  <strong>Floor/Unit:</strong> {order.addressDetails.floor}
+                </p>
+              )}
+              {(order.instructions || order.addressDetails?.instructions) && (
+                <div className="mt-6 p-5 bg-orange-50/50 rounded-xl border border-orange-200">
+                  <strong className="block mb-2 text-lg">Special Instructions:</strong>
+                  <p className="text-lg italic text-orange-900">
+                    {order.instructions || order.addressDetails?.instructions}
+                  </p>
+                </div>
+              )}
+            </div>
 
             {order.rider && (
               <>
-                <Separator className="my-8" />
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-8">
-                  <div className="flex items-center gap-6">
-                    <div className="w-20 h-20 rounded-full bg-rose-100 flex items-center justify-center shadow-lg">
-                      <Truck className="h-12 w-12 text-rose-600" />
+                <Separator className="my-12" />
+                <div className="flex flex-col md:flex-row items-center justify-between gap-10">
+                  <div className="flex items-center gap-8">
+                    <div className="w-24 h-24 rounded-full bg-gradient-to-br from-orange-500 to-amber-600 flex items-center justify-center shadow-xl">
+                      <Truck className="h-14 w-14 text-white" />
                     </div>
                     <div>
-                      <p className="text-2xl font-bold">{order.rider.name}</p>
-                      <p className="text-muted-foreground text-lg">Your Delivery Partner</p>
+                      <p className="text-3xl font-bold">{order.rider.name}</p>
+                      <p className="text-xl text-muted-foreground mt-2">Your Delivery Partner</p>
                     </div>
                   </div>
 
-                  <Button size="lg" variant="secondary" asChild className="h-14 px-8 text-lg">
+                  <Button
+                    size="lg"
+                    className="h-16 px-12 text-xl bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700"
+                    asChild
+                  >
                     <a href={`tel:${order.rider.phone}`}>
-                      <Phone className="mr-3 h-6 w-6" />
+                      <Phone className="mr-4 h-7 w-7" />
                       Call Rider
                     </a>
                   </Button>
@@ -391,33 +422,38 @@ export default function OrderTrackingPage() {
           </CardContent>
         </Card>
 
-        {/* Action Buttons */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pb-12">
-          <Button variant="outline" size="lg" asChild className="h-14 text-lg">
-            <Link to="/orders">My Orders</Link>
+        {/* Bottom Actions */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pb-20">
+          <Button
+            variant="outline"
+            size="lg"
+            className="h-16 text-xl border-orange-500 text-orange-700 hover:bg-orange-50"
+            asChild
+          >
+            <Link to={isAuthenticated ? '/orders' : '/'}>Back to Orders</Link>
           </Button>
 
           <Button
             size="lg"
-            onClick={handleReorder}
             disabled={reorderMutation.isPending || isCancelled}
-            className="h-14 text-lg bg-rose-600 hover:bg-rose-700"
+            onClick={handleReorder}
+            className="h-16 text-xl bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-700 hover:to-amber-700 shadow-xl"
           >
             {reorderMutation.isPending ? (
               <>
-                <Loader2 className="mr-3 h-6 w-6 animate-spin" />
+                <Loader2 className="mr-4 h-7 w-7 animate-spin" />
                 Adding to Cart...
               </>
             ) : (
               <>
-                <RotateCcw className="mr-3 h-6 w-6" />
+                <RotateCcw className="mr-4 h-7 w-7" />
                 Order Again
               </>
             )}
           </Button>
         </div>
 
-        {/* Review Modal — Only mount when user is authenticated */}
+        {/* Hidden Review Modal */}
         {isAuthenticated && (
           <SubmitReviewModal
             orderId={order._id}

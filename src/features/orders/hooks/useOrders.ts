@@ -1,7 +1,10 @@
 // src/features/orders/hooks/useOrders.ts
-// PRODUCTION-READY — JANUARY 09, 2026
-// FULL REAL-TIME SUPPORT: Admin actions instantly reflect on public tracking page
-// Fixed: track-order cache shape alignment + rider assignment updates
+// PRODUCTION-READY — JANUARY 2026
+// Features:
+// - Full real-time support via optimistic updates & cache invalidation
+// - Proper typing & error handling
+// - Consistent cache updates for both authenticated & public tracking pages
+// - Better toast feedback & UX
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
@@ -20,7 +23,7 @@ import type {
 } from '@/types/order.types';
 
 // ============================================================
-// TIMELINE RESPONSE TYPE
+// SHARED RESPONSE TYPES
 // ============================================================
 
 interface OrderTimelineResponse {
@@ -35,12 +38,23 @@ interface OrderTimelineResponse {
   shortId: string;
 }
 
+interface AdminOrdersResponse {
+  success: true;
+  orders: Order[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+  };
+}
+
 // ============================================================
-// CUSTOMER HOOKS (Authenticated)
+// CUSTOMER / AUTHENTICATED USER HOOKS
 // ============================================================
 
 export const useMyOrders = () => {
   const { isAuthenticated } = useAuthStore();
+
   return useQuery<Order[]>({
     queryKey: ['my-orders'],
     queryFn: async () => {
@@ -48,7 +62,8 @@ export const useMyOrders = () => {
       return data.orders;
     },
     enabled: isAuthenticated,
-    staleTime: 30_000,
+    staleTime: 45_000, // slightly longer than before
+    gcTime: 10 * 60_000,
   });
 };
 
@@ -56,13 +71,13 @@ export const useOrder = (orderId: string | undefined) => {
   return useQuery<Order>({
     queryKey: ['order', orderId],
     queryFn: async () => {
-      if (!orderId) throw new Error('Order ID required');
+      if (!orderId) throw new Error('Order ID is required');
       const { data } = await api.get<OrderResponse>(`/orders/${orderId}`);
       return data.order;
     },
     enabled: !!orderId,
-    staleTime: 30_000,
-    gcTime: 10 * 60_000,
+    staleTime: 60_000,
+    gcTime: 15 * 60_000,
   });
 };
 
@@ -70,40 +85,42 @@ export const useOrderTimeline = (orderId: string | undefined) => {
   return useQuery<OrderTimelineResponse>({
     queryKey: ['order-timeline', orderId],
     queryFn: async () => {
-      if (!orderId) throw new Error('Order ID required');
+      if (!orderId) throw new Error('Order ID is required');
       const { data } = await api.get<OrderTimelineResponse>(`/orders/${orderId}/timeline`);
       return data;
     },
     enabled: !!orderId,
-    staleTime: 30_000,
-    gcTime: 5 * 60_000,
+    staleTime: 60_000,
   });
 };
 
 // ============================================================
-// PUBLIC TRACKING HOOKS
+// PUBLIC / GUEST TRACKING HOOKS
 // ============================================================
 
 export const useTrackOrder = (orderId: string | undefined) => {
   return useQuery<TrackOrderResponse>({
     queryKey: ['track-order', orderId],
     queryFn: async () => {
-      if (!orderId) throw new Error('Order ID required');
+      if (!orderId) throw new Error('Order ID is required');
       const { data } = await api.get<TrackOrderResponse>(`/orders/track/${orderId}`);
       return data;
     },
     enabled: !!orderId,
-    // Important: No staleTime → defaults to 0 → allows frequent background refetch
-    // But primary updates come from socket + optimistic setQueryData
+    // No staleTime → frequent background refetch (socket is primary source anyway)
+    refetchOnWindowFocus: true,
+    refetchInterval: 45_000, // gentle background refresh
   });
 };
 
 export const useTrackOrdersByPhone = () => {
+  const queryClient = useQueryClient();
+
   return useMutation<OrdersResponse, Error, { phone: string }>({
     mutationFn: async ({ phone }) => {
       const cleaned = phone.replace(/\D/g, '');
       if (!/^03[0-9]{9}$/.test(cleaned)) {
-        throw new Error('Please enter a valid Pakistani phone number (e.g. 03123456789)');
+        throw new Error('Please enter a valid Pakistani mobile number (e.g. 03123456789)');
       }
       const { data } = await api.post<OrdersResponse>('/orders/track/by-phone', { phone: cleaned });
       return data;
@@ -113,38 +130,54 @@ export const useTrackOrdersByPhone = () => {
         toast.info('No orders found for this phone number');
       } else {
         toast.success(`Found ${data.orders.length} order${data.orders.length > 1 ? 's' : ''}`);
+        // Optional: prefetch single orders for faster navigation
+        data.orders.forEach((order) => {
+          queryClient.setQueryData(['track-order', order._id], { success: true, order });
+        });
       }
     },
     onError: (error: any) => {
-      toast.error(error.response?.data?.message || error.message || 'Failed to search orders');
+      toast.error(error.message || 'Failed to search orders');
     },
   });
 };
 
 // ============================================================
-// ORDER CREATION
+// ORDER CREATION HOOKS
 // ============================================================
 
 const CART_STORAGE_KEY = 'altawakkalfoods-cart-v5';
 
 export const useCreateOrder = () => {
-  const qc = useQueryClient();
+  const queryClient = useQueryClient();
   const { clearCart } = useCartStore();
+
   return useMutation<CreateOrderResponse, Error, CreateOrderPayload>({
     mutationFn: async (payload) => {
       const { data } = await api.post<CreateOrderResponse>('/orders', payload);
       return data;
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['my-orders'] });
+    onSuccess: (data) => {
+      // Clear cart & local storage
       clearCart();
       localStorage.removeItem(CART_STORAGE_KEY);
+
+      // Optimistically add to my-orders list if authenticated
+      queryClient.invalidateQueries({ queryKey: ['my-orders'] });
+
+      toast.success('Order placed successfully! 🎉', {
+        description: `Order #${data.order.shortId} received`,
+      });
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || 'Failed to place order');
     },
   });
 };
 
 export const useCreateGuestOrder = () => {
   const { clearCart } = useCartStore();
+
   return useMutation<CreateOrderResponse, Error, CreateGuestOrderPayload>({
     mutationFn: async (payload) => {
       const { data } = await api.post<CreateOrderResponse>('/orders', payload);
@@ -153,12 +186,18 @@ export const useCreateGuestOrder = () => {
     onSuccess: () => {
       clearCart();
       localStorage.removeItem(CART_STORAGE_KEY);
+      toast.success('Order placed successfully! 🎉', {
+        description: 'Check your email or track with phone number',
+      });
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || 'Failed to place order');
     },
   });
 };
 
 // ============================================================
-// ORDER ACTIONS (Customer)
+// CUSTOMER ORDER ACTIONS
 // ============================================================
 
 export const useCancelOrder = () => {
@@ -172,9 +211,10 @@ export const useCancelOrder = () => {
     onSuccess: (data) => {
       const order = data.order;
       queryClient.setQueryData(['track-order', order._id], { success: true, order });
+      queryClient.setQueryData(['order', order._id], order);
       queryClient.invalidateQueries({ queryKey: ['my-orders'] });
-      queryClient.invalidateQueries({ queryKey: ['order'] });
-      queryClient.invalidateQueries({ queryKey: ['order-timeline'] });
+      queryClient.invalidateQueries({ queryKey: ['order-timeline', order._id] });
+
       toast.success('Order cancelled successfully');
     },
     onError: (error: any) => {
@@ -194,9 +234,10 @@ export const useCustomerRejectOrder = () => {
     onSuccess: (data) => {
       const order = data.order;
       queryClient.setQueryData(['track-order', order._id], { success: true, order });
+      queryClient.setQueryData(['order', order._id], order);
       queryClient.invalidateQueries({ queryKey: ['my-orders'] });
-      queryClient.invalidateQueries({ queryKey: ['order'] });
-      queryClient.invalidateQueries({ queryKey: ['order-timeline'] });
+      queryClient.invalidateQueries({ queryKey: ['order-timeline', order._id] });
+
       toast.success('Order rejected successfully');
     },
     onError: (error: any) => {
@@ -223,7 +264,7 @@ export const useRequestRefund = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['order'] });
       queryClient.invalidateQueries({ queryKey: ['my-orders'] });
-      toast.success('Refund request submitted successfully');
+      toast.success('Refund request submitted. We will review it shortly.');
     },
     onError: (error: any) => {
       toast.error(error.response?.data?.message || 'Failed to submit refund request');
@@ -232,8 +273,9 @@ export const useRequestRefund = () => {
 };
 
 export const useReorder = () => {
-  const qc = useQueryClient();
+  const queryClient = useQueryClient();
   const { clearCart, addMultipleItems } = useCartStore();
+
   return useMutation<ReorderResponse, Error, string>({
     mutationFn: async (orderId) => {
       const { data } = await api.post<ReorderResponse>(`/orders/${orderId}/reorder`);
@@ -241,11 +283,14 @@ export const useReorder = () => {
     },
     onSuccess: (data) => {
       clearCart();
-      if (data.cart.items.length > 0) {
+      if (data.cart?.items?.length > 0) {
         addMultipleItems(data.cart.items);
       }
-      qc.invalidateQueries({ queryKey: ['cart'] });
-      toast.success(data.message);
+      queryClient.invalidateQueries({ queryKey: ['cart'] });
+      toast.success(data.message || 'Items added back to cart!');
+    },
+    onError: () => {
+      toast.error('Failed to reorder items');
     },
   });
 };
@@ -265,13 +310,13 @@ export const downloadReceipt = async (orderId: string) => {
 
     const link = document.createElement('a');
     link.href = url;
-    link.download = `altawakkalfoods-Receipt-#${orderId.slice(-6).toUpperCase()}.pdf`;
+    link.download = `receipt-${orderId.slice(-6).toUpperCase()}.pdf`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     window.URL.revokeObjectURL(url);
 
-    toast.success('Receipt downloaded successfully');
+    toast.success('Receipt downloaded');
   } catch (error: any) {
     console.error('Receipt download failed:', error);
     toast.error(error.response?.data?.message || 'Failed to download receipt');
@@ -279,7 +324,7 @@ export const downloadReceipt = async (orderId: string) => {
 };
 
 // ============================================================
-// ADMIN / KITCHEN / RIDER HOOKS
+// ADMIN / KITCHEN / RIDER OPERATIONS
 // ============================================================
 
 export const useUpdateOrderStatus = () => {
@@ -294,28 +339,20 @@ export const useUpdateOrderStatus = () => {
       const { data } = await api.patch<OrderResponse>(`/orders/${orderId}/status`, { status });
       return data;
     },
-    onSuccess: (data, variables) => {
-      const orderId = variables.orderId;
+    onSuccess: (data, { orderId }) => {
       const updatedOrder = data.order;
 
-      // Update authenticated single order view
-      queryClient.setQueryData(['order', orderId], data);
+      queryClient.setQueryData(['order', orderId], updatedOrder);
+      queryClient.setQueryData(['track-order', orderId], { success: true, order: updatedOrder });
 
-      // Critical: Update public tracking page cache with exact expected shape
-      queryClient.setQueryData(['track-order', orderId], {
-        success: true,
-        order: updatedOrder,
-      });
-
-      // Invalidate lists to refetch fresh data
       queryClient.invalidateQueries({ queryKey: ['my-orders'] });
       queryClient.invalidateQueries({ queryKey: ['admin-orders'] });
       queryClient.invalidateQueries({ queryKey: ['order-timeline', orderId] });
 
-      toast.success(`Order status updated to ${updatedOrder.status.replace(/_/g, ' ')}`);
+      toast.success(`Status updated → ${updatedOrder.status.replace(/_/g, ' ')}`);
     },
     onError: (error: any) => {
-      toast.error(error.response?.data?.message || 'Failed to update order status');
+      toast.error(error.response?.data?.message || 'Failed to update status');
     },
   });
 };
@@ -332,19 +369,12 @@ export const useAssignRider = () => {
       const { data } = await api.patch<OrderResponse>(`/orders/${orderId}/assign`, { riderId });
       return data;
     },
-    onSuccess: (data, variables) => {
-      const orderId = variables.orderId;
+    onSuccess: (data, { orderId }) => {
       const updatedOrder = data.order;
 
-      queryClient.setQueryData(['order', orderId], data);
+      queryClient.setQueryData(['order', orderId], updatedOrder);
+      queryClient.setQueryData(['track-order', orderId], { success: true, order: updatedOrder });
 
-      // Critical: Public tracking page sees rider assignment instantly
-      queryClient.setQueryData(['track-order', orderId], {
-        success: true,
-        order: updatedOrder,
-      });
-
-      queryClient.invalidateQueries({ queryKey: ['my-orders'] });
       queryClient.invalidateQueries({ queryKey: ['admin-orders'] });
 
       toast.success('Rider assigned successfully');
@@ -355,27 +385,17 @@ export const useAssignRider = () => {
   });
 };
 
-// ============================================================
-// ADMIN HOOKS
-// ============================================================
-
-interface AdminOrdersResponse {
-  success: true;
-  orders: Order[];
-  pagination: { page: number; limit: number; total: number };
-}
-
-export const useAdminOrders = (filters?: {
+export const useAdminOrders = (filters: {
   status?: string;
   page?: number;
   limit?: number;
   search?: string;
-}) => {
+} = {}) => {
   const params = new URLSearchParams();
-  if (filters?.status) params.append('status', filters.status);
-  if (filters?.page) params.append('page', String(filters.page));
-  if (filters?.limit) params.append('limit', String(filters.limit));
-  if (filters?.search) params.append('search', filters.search);
+  if (filters.status) params.append('status', filters.status);
+  if (filters.page) params.append('page', String(filters.page));
+  if (filters.limit) params.append('limit', String(filters.limit));
+  if (filters.search) params.append('search', filters.search);
 
   const url = `/orders${params.toString() ? `?${params.toString()}` : ''}`;
 
@@ -393,20 +413,27 @@ export const useAdminOrders = (filters?: {
 export const useAdminRejectOrder = () => {
   const queryClient = useQueryClient();
 
-  return useMutation<OrderResponse, Error, { orderId: string; reason?: string; note?: string }>({
+  return useMutation<
+    OrderResponse,
+    Error,
+    { orderId: string; reason?: string; note?: string }
+  >({
     mutationFn: async ({ orderId, reason, note }) => {
-      const { data } = await api.patch<OrderResponse>(`/orders/${orderId}/admin-reject`, { reason, note });
+      const { data } = await api.patch<OrderResponse>(`/orders/${orderId}/admin-reject`, {
+        reason,
+        note,
+      });
       return data;
     },
     onSuccess: (data) => {
       const updatedOrder = data.order;
-
       queryClient.setQueryData(['track-order', updatedOrder._id], {
         success: true,
         order: updatedOrder,
       });
-
+      queryClient.setQueryData(['order', updatedOrder._id], updatedOrder);
       queryClient.invalidateQueries({ queryKey: ['admin-orders'] });
+
       toast.success('Order rejected by admin');
     },
     onError: (error: any) => {

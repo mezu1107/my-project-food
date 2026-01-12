@@ -1,6 +1,6 @@
 // src/features/orders/pages/CheckoutPage.tsx
-// PRODUCTION-READY — January 02, 2026
-// FINAL: Fixed delivery fee bugs, improved UX, robust edge cases
+// PRODUCTION-READY — January 02, 2026 → UPDATED January 11, 2026
+// Added: Optional email field for guests (for order updates & receipts)
 
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -45,6 +45,7 @@ import {
   CheckCircle2,
   Truck,
   AlertTriangle,
+  Mail,
 } from 'lucide-react';
 
 import { toast } from 'sonner';
@@ -71,6 +72,7 @@ const authenticatedSchema = baseSchema.extend({
 const guestSchema = baseSchema.extend({
   name: z.string().min(3, 'Name must be at least 3 characters').trim(),
   phone: z.string().regex(/^03\d{9}$/, 'Invalid format: use 03XXXXXXXXX'),
+  email: z.string().email('Please enter a valid email').optional(), // ← NEW: optional email
   guestAddress: z.object({
     fullAddress: z.string().min(15, 'Full address required (minimum 15 characters)'),
     areaId: z.string({ required_error: 'Please select a delivery area' }),
@@ -116,6 +118,7 @@ export default function CheckoutPage() {
       instructions: orderNote || '',
       name: '',
       phone: '',
+      email: '',
     },
   });
 
@@ -228,6 +231,7 @@ export default function CheckoutPage() {
           items: itemsPayload,
           name: data.name!.trim(),
           phone: data.phone!.trim(),
+          email: data.email?.trim() || undefined, // ← NEW: pass optional email to backend
           guestAddress: {
             fullAddress: data.guestAddress!.fullAddress.trim(),
             areaId: data.guestAddress!.areaId,
@@ -299,6 +303,22 @@ export default function CheckoutPage() {
                     <Label htmlFor="phone">Phone Number *</Label>
                     <Input id="phone" {...register('phone')} placeholder="03451234567" className="h-12 mt-2" />
                     {errors.phone && <p className="mt-2 text-sm text-destructive">{errors.phone.message}</p>}
+                  </div>
+
+                  {/* NEW: Optional Email field */}
+                  <div className="md:col-span-2">
+                    <Label htmlFor="email" className="flex items-center gap-2">
+                      <Mail className="h-5 w-5" />
+                      Email (optional – for order updates & receipt)
+                    </Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      {...register('email')}
+                      placeholder="yourname@example.com"
+                      className="h-12 mt-2"
+                    />
+                    {errors.email && <p className="mt-2 text-sm text-destructive">{errors.email.message}</p>}
                   </div>
                 </CardContent>
               </Card>

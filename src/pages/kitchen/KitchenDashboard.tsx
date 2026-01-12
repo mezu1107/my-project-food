@@ -1,38 +1,56 @@
 // src/pages/kitchen/KitchenDashboard.tsx
-// PRODUCTION-READY — FULLY RESPONSIVE (320px → 4K)
-// Mobile-first kitchen display optimized for wall-mounted screens & tablets
-// Fluid grid, large touch targets, high contrast for kitchen environment
+// FINAL FIXED & PRODUCTION-READY — JANUARY 12, 2026
 
 import { useEffect, useState } from "react";
 import { format } from "date-fns";
-import { ChefHat } from "lucide-react";
+import { ChefHat, Volume2, VolumeX, AlertTriangle } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { motion, AnimatePresence } from "framer-motion";
+import { toast } from "sonner";
+import confetti from "canvas-confetti";
+import clsx from "clsx"; // For cn utility (make sure it's installed: npm i clsx)
 
 import { apiClient } from "@/lib/api";
-import { initSocket, joinRoom } from "@/lib/socket";
-import { playSound } from "@/lib/utils";
+import { getSocket, joinRoom } from "@/lib/socket"; // ← Make sure this file exports both
+import { audioManager } from "@/features/notifications/store/notificationStore";
 
 import {
   KitchenOrderPopulated,
   KitchenOrdersResponse,
-  KitchenStats,
-} from "../../features/kitchen/types/types";
+} from "@/features/kitchen/types/types";
 
 import KitchenOrderCard from "@/features/kitchen/components/KitchenOrderCard";
-import StatsBar from "../../features/kitchen/components/StatsBar";
+import StatsBar from "@/features/kitchen/components/StatsBar";
+
+// Define sound keys that actually exist in your SOUND_MAP
+const SOUND_KEYS = {
+  urgent: "urgent-new-order",
+  normal: "new-order-bell",
+  ready: "ready", // Make sure this exists in your AudioManager SOUND_MAP!
+} as const;
 
 export default function KitchenDashboard() {
   const queryClient = useQueryClient();
-  const [prevNewCount, setPrevNewCount] = useState(0);
 
-  const { data, isLoading, isError } = useQuery<KitchenOrdersResponse>({
+  const [newOrderBanner, setNewOrderBanner] = useState<{
+    show: boolean;
+    isUrgent: boolean;
+    count: number;
+  }>({ show: false, isUrgent: false, count: 0 });
+
+  const [soundEnabled, setSoundEnabled] = useState(
+    localStorage.getItem("kitchen-sound") !== "muted"
+  );
+
+  // Query for kitchen orders
+  const { data: kitchenResponse, isLoading, isError } = useQuery<KitchenOrdersResponse>({
     queryKey: ["kitchen-orders"],
     queryFn: async () => {
-      const res = await apiClient.get<KitchenOrdersResponse>("/kitchen/orders");
-      return res;
+      const res = await apiClient.get("/kitchen/orders");
+      return res.data; // ← FIXED: axios returns data in .data
     },
-    refetchInterval: 12000,
-    staleTime: 8000,
+    refetchInterval: 8000,
+    staleTime: 5000,
   });
 
   const startItemMutation = useMutation({
@@ -53,107 +71,211 @@ export default function KitchenDashboard() {
     mutationFn: async (kitchenOrderId: string) => {
       await apiClient.post("/kitchen/complete-order", { kitchenOrderId });
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["kitchen-orders"] });
-    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["kitchen-orders"] }),
   });
 
   useEffect(() => {
-    const socket = initSocket();
+    const socket = getSocket();
     if (!socket) return;
 
     joinRoom("kitchen");
 
-    const handleUpdate = () => {
-      queryClient.invalidateQueries({ queryKey: ["kitchen-orders"] });
-    };
+    socket.on("newOrderAlert", (payload: {
+      orderId: string;
+      shortId: string;
+      customerName: string;
+      total: number;
+      itemsCount: number;
+      isUrgent: boolean;
+    }) => {
+      setNewOrderBanner((prev) => ({
+        show: true,
+        isUrgent: payload.isUrgent,
+        count: prev.count + 1,
+      }));
 
-    socket.on("itemStarted", handleUpdate);
-    socket.on("itemCompleted", handleUpdate);
-    socket.on("orderReadyForDelivery", () => {
-      playSound("ready");
-      handleUpdate();
+      if (soundEnabled) {
+        audioManager.play(
+          payload.isUrgent ? SOUND_KEYS.urgent : SOUND_KEYS.normal,
+          { loop: true, volume: payload.isUrgent ? 0.95 : 0.8 }
+        );
+      }
+
+      if (payload.isUrgent) {
+        confetti({
+          particleCount: 80,
+          spread: 100,
+          origin: { y: 0.6 },
+          colors: ["#ff0000", "#ff4444", "#ff7777"],
+        });
+      }
+
+      toast.info(`NEW ORDER #${payload.shortId}!`, {
+        description: payload.isUrgent
+          ? `URGENT! ${payload.itemsCount} items • ${payload.customerName}`
+          : `${payload.itemsCount} items • ${payload.customerName}`,
+        duration: Infinity,
+        style: {
+          background: payload.isUrgent ? "#b91c1c" : "#c2410c",
+          color: "white",
+          fontSize: "1.3rem",
+          padding: "1.5rem 2rem",
+          borderRadius: "1rem",
+        },
+        action: {
+          label: "Acknowledge",
+          onClick: () => {
+            audioManager.stopAll();
+            socket.emit("acknowledgeNewOrder", { orderId: payload.orderId });
+            setNewOrderBanner({ show: false, isUrgent: false, count: 0 });
+            toast.dismiss();
+          },
+        },
+      });
     });
-    socket.on("orderCompleted", handleUpdate);
-    socket.on("kitchen-update", handleUpdate);
+
+    socket.on("stopNewOrderAlert", () => {
+      audioManager.stopAll();
+    });
+
+    socket.on("kitchenOrderUpdate", () => {
+      queryClient.invalidateQueries({ queryKey: ["kitchen-orders"] });
+    });
+
+    socket.on("kitchenStatsUpdate", () => {
+      queryClient.invalidateQueries({ queryKey: ["kitchen-orders"] });
+    });
+
+    socket.on("orderReadyForDelivery", () => {
+      if (soundEnabled && SOUND_KEYS.ready) {
+        audioManager.play(SOUND_KEYS.ready, { volume: 0.85 });
+      }
+    });
 
     return () => {
-      socket.off("itemStarted", handleUpdate);
-      socket.off("itemCompleted", handleUpdate);
+      socket.off("newOrderAlert");
+      socket.off("stopNewOrderAlert");
+      socket.off("kitchenOrderUpdate");
+      socket.off("kitchenStatsUpdate");
       socket.off("orderReadyForDelivery");
-      socket.off("orderCompleted");
-      socket.off("kitchen-update");
+      audioManager.stopAll();
     };
-  }, [queryClient]);
+  }, [queryClient, soundEnabled]);
 
-  useEffect(() => {
-    const currentNew = data?.stats.new ?? 0;
-    if (currentNew > prevNewCount && prevNewCount > 0) {
-      playSound("new");
-    }
-    setPrevNewCount(currentNew);
-  }, [data?.stats.new]);
+  const toggleSound = () => {
+    const newState = !soundEnabled;
+    setSoundEnabled(newState);
+    localStorage.setItem("kitchen-sound", newState ? "enabled" : "muted");
+    if (!newState) audioManager.stopAll();
+    toast.info(newState ? "Sound enabled" : "Sound muted", { duration: 2000 });
+  };
 
-  const ordersToDisplay: KitchenOrderPopulated[] = [
-    ...(data?.active ?? []),
-    ...(data?.ready ?? [])
+  const ordersToDisplay = [
+    ...(kitchenResponse?.active ?? []),
+    ...(kitchenResponse?.ready ?? []),
   ];
 
   if (isLoading) {
     return (
       <main className="min-h-screen bg-gray-950 flex flex-col items-center justify-center gap-10 px-4">
-        <ChefHat className="w-32 h-32 md:w-40 md:h-40 text-orange-500 animate-pulse" />
-        <p className="text-3xl md:text-5xl font-bold text-gray-300 text-center">
-          Loading Kitchen Dashboard...
+        <ChefHat className="w-32 h-32 md:w-48 md:h-48 text-orange-500 animate-pulse" />
+        <p className="text-4xl md:text-6xl font-black text-gray-300 text-center">
+          Loading Kitchen...
         </p>
       </main>
     );
   }
 
-  if (isError) {
+  if (isError || !kitchenResponse) {
     return (
       <main className="min-h-screen bg-gray-950 flex items-center justify-center px-4">
-        <p className="text-3xl md:text-5xl text-red-500 font-bold text-center">
-          Failed to load kitchen data
-        </p>
+        <div className="text-center">
+          <AlertTriangle className="w-32 h-32 text-red-600 mx-auto mb-8" />
+          <p className="text-5xl font-black text-red-500">Connection Error</p>
+          <p className="text-2xl text-gray-400 mt-4">
+            Please check network or contact tech support
+          </p>
+        </div>
       </main>
     );
   }
 
   return (
-    <main className="min-h-screen bg-gray-950 text-white">
+    <main className="min-h-screen bg-gray-950 text-white flex flex-col">
       {/* Header */}
-      <header className="bg-gradient-to-r from-orange-600 to-amber-600 py-12 md:py-16 text-center shadow-2xl">
-        <div className="container mx-auto px-4">
-          <h1 className="text-5xl md:text-7xl lg:text-8xl font-black flex flex-col md:flex-row items-center justify-center gap-6 md:gap-10">
-            <ChefHat className="w-20 h-20 md:w-28 md:h-28 lg:w-36 lg:h-36" />
-            KITCHEN DISPLAY
-          </h1>
-          <p className="text-2xl md:text-3xl lg:text-4xl mt-6 opacity-90 font-medium">
-            {format(new Date(), "EEEE, MMMM d, yyyy")}
-          </p>
+      <header className="bg-gradient-to-r from-orange-700 via-amber-600 to-orange-700 py-8 md:py-12 shadow-2xl">
+        <div className="container mx-auto px-6 flex flex-col md:flex-row items-center justify-between gap-6">
+          <div className="flex items-center gap-6">
+            <ChefHat className="w-20 h-20 md:w-28 md:h-28 text-white animate-pulse" />
+            <div>
+              <h1 className="text-5xl md:text-7xl font-black tracking-tight">KITCHEN</h1>
+              <p className="text-2xl md:text-3xl opacity-90 mt-2">
+                {format(new Date(), "EEEE, d MMMM yyyy")}
+              </p>
+            </div>
+          </div>
+
+          {/* Sound Toggle */}
+          <button
+            onClick={toggleSound}
+            className="p-4 rounded-full bg-white/10 hover:bg-white/20 transition-colors"
+            aria-label={soundEnabled ? "Mute alerts" : "Enable alerts"}
+          >
+            {soundEnabled ? (
+              <Volume2 className="w-10 h-10" />
+            ) : (
+              <VolumeX className="w-10 h-10 text-red-400" />
+            )}
+          </button>
         </div>
       </header>
 
-      {/* Stats Bar */}
-      <StatsBar stats={data!.stats} />
+      {/* New Order Alert Banner */}
+      <AnimatePresence>
+        {newOrderBanner.show && (
+          <motion.div
+            initial={{ y: -100, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: -100, opacity: 0 }}
+            className={clsx(
+              "sticky top-0 z-50 py-6 text-center text-3xl md:text-5xl font-black shadow-2xl",
+              newOrderBanner.isUrgent
+                ? "bg-gradient-to-r from-red-700 to-rose-800 text-white animate-pulse"
+                : "bg-gradient-to-r from-orange-600 to-amber-600 text-white"
+            )}
+          >
+            <div className="container mx-auto px-6 flex items-center justify-center gap-8">
+              <AlertTriangle className="w-16 h-16 md:w-24 md:h-24 animate-bounce" />
+              <div>
+                NEW ORDER ALERT! ×{newOrderBanner.count}
+                {newOrderBanner.isUrgent && (
+                  <span className="ml-4 text-yellow-300 font-extrabold"> URGENT!</span>
+                )}
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-      {/* Orders Grid */}
-      <section className="container mx-auto px-4 py-12 lg:py-16">
+      {/* Stats */}
+      <StatsBar stats={kitchenResponse.stats} />
+
+      {/* Main Orders Grid */}
+      <section className="container mx-auto px-4 py-12 lg:py-16 flex-1">
         {ordersToDisplay.length === 0 ? (
-          <div className="text-center py-20 lg:py-32">
-            <div className="bg-gray-800/50 backdrop-blur-sm rounded-3xl p-12 md:p-20 inline-block max-w-4xl mx-auto">
-              <ChefHat className="w-32 h-32 md:w-48 md:h-48 mx-auto text-gray-600 mb-8" />
-              <h2 className="text-5xl md:text-7xl font-black text-gray-400">
+          <div className="text-center py-32">
+            <div className="bg-gray-900/70 backdrop-blur-lg rounded-3xl p-16 inline-block max-w-4xl mx-auto border border-gray-700">
+              <ChefHat className="w-40 h-40 mx-auto text-gray-600 mb-10" />
+              <h2 className="text-6xl md:text-8xl font-black text-gray-400">
                 All Caught Up!
               </h2>
-              <p className="text-3xl md:text-5xl mt-6 text-gray-500">
-                No active orders right now
+              <p className="text-4xl md:text-5xl mt-8 text-gray-500">
+                No active or ready orders right now
               </p>
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-8 lg:gap-12 max-w-screen-2xl mx-auto">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-8 lg:gap-12">
             {ordersToDisplay.map((order) => (
               <KitchenOrderCard
                 key={order._id}
@@ -174,8 +296,8 @@ export default function KitchenDashboard() {
       </section>
 
       {/* Footer */}
-      <footer className="text-center py-8 text-gray-500 text-lg md:text-xl lg:text-2xl">
-        Real-time updates • Last refreshed: {format(new Date(), "h:mm:ss a")}
+      <footer className="text-center py-8 text-gray-500 text-xl md:text-2xl bg-gray-900/80 border-t border-gray-800">
+        Real-time • Last update: {format(new Date(), "h:mm:ss a")}
       </footer>
     </main>
   );

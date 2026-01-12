@@ -1,10 +1,11 @@
 // src/types/order.types.ts
-// FINAL PRODUCTION — DECEMBER 27, 2025
-// Updated: Added 'totals' field for public tracking response
+// FINAL PRODUCTION — DECEMBER 27, 2025 → UPDATED JANUARY 11, 2026
+// Added: email field to GuestInfo for guest order notifications
 
 import type { Address } from '@/features/address/types/address.types';
 import type { Review } from '@/features/reviews/types/review.types';
 import { CartItem, MenuItemInCart } from '@/types/cart.types';
+
 export const ALLOWED_UNITS = [
   'pc',
   'bottle',
@@ -34,6 +35,7 @@ export const UNIT_LABELS: Record<Unit, string> = {
   dozen: 'per dozen',
   tray: 'per tray',
 };
+
 export type PaymentMethod =
   | 'cash'
   | 'card'
@@ -69,7 +71,7 @@ export interface OrderItem {
   };
   name: string;
   image?: string;
-  unit: Unit; // ← Now strongly typed
+  unit: Unit;
   priceAtOrder: number;
   quantity: number;
   sides?: Array<{
@@ -93,6 +95,7 @@ export interface OrderItem {
 export interface GuestInfo {
   name: string;
   phone: string;
+  email?: string;           // ← NEW: optional email for guest notifications
   isGuest: true;
 }
 
@@ -121,10 +124,11 @@ export interface OrderTotals {
   walletUsed: number;
   finalAmount: number;
 }
+
 // Public tracking endpoint response wrapper
 export interface TrackOrderResponse {
   success: true;
-  order: Order; // ← correct nested order
+  order: Order;
 }
 
 export interface Order {
@@ -149,7 +153,7 @@ export interface Order {
   discountApplied?: number;
   walletUsed?: number;
   finalAmount?: number;
-  totals?: OrderTotals; // ← Used in public tracking
+  totals?: OrderTotals;
   paymentMethod: PaymentMethod;
   paymentStatus: PaymentStatus;
   status: OrderStatus;
@@ -200,6 +204,7 @@ export interface CreateOrderPayload {
 export interface CreateGuestOrderPayload extends Omit<CreateOrderPayload, 'addressId'> {
   name: string;
   phone: string;
+  email?: string;           // ← NEW: optional email field in payload
   guestAddress: {
     fullAddress: string;
     areaId: string;
@@ -240,7 +245,6 @@ export interface OrderResponse {
   success: true;
   order: Order;
 }
-
 
 export interface ReorderResponse {
   success: true;
@@ -284,8 +288,10 @@ export const PAYMENT_STATUS_LABELS: Record<PaymentStatus, string> = {
   refunded: 'Refunded',
   refund_pending: 'Refund Pending',
 };
+
 // Add this near the top, after your imports
 export type AnyOrderResponse = OrderResponse | TrackOrderResponse;
+
 export const getOrderStatusLabel = (status: OrderStatus): string =>
   ORDER_STATUS_LABELS[status] || status;
 

@@ -1,6 +1,7 @@
 // src/components/Header.tsx
-// FINAL PRODUCTION HEADER — FULLY RESPONSIVE (320px → 4K)
-// Warm Pakistani-inspired design with saffron-orange accents, matching Home & Footer
+// FINAL PRODUCTION — JANUARY 12, 2026
+// Fully responsive (mobile → desktop), warm saffron-orange theme
+// Features: Notification Center, cart badge, smooth mobile menu
 
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
@@ -10,6 +11,7 @@ import {
   Menu,
   LogOut,
   MapPin,
+  Bell,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -23,6 +25,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 
 import ServiceAreaModal from "@/components/ServiceAreaModal";
+import NotificationCenter from "@/features/notifications/components/NotificationCenter";
 import { useAuthStore } from "@/features/auth/store/authStore";
 import { useCartStore } from "@/features/cart/hooks/useCartStore";
 import { useServerCartQuery } from "@/features/cart/hooks/useServerCart";
@@ -34,13 +37,13 @@ export const Header = () => {
   const guestCart = useCartStore();
   const { data: cartData } = useServerCartQuery();
 
-  const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
-  const [areaModalOpen, setAreaModalOpen] = useState<boolean>(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [areaModalOpen, setAreaModalOpen] = useState(false);
 
   const isLoggedIn = !!user;
 
-  // Cart item count for badge (guest or authenticated)
-  const cartCount = useMemo<number>(() => {
+  // Cart count (unified guest + logged-in)
+  const cartCount = useMemo(() => {
     const items = isLoggedIn ? cartData?.items ?? [] : guestCart.items;
     return items.reduce((sum, item) => sum + item.quantity, 0);
   }, [isLoggedIn, cartData?.items, guestCart.items]);
@@ -53,32 +56,29 @@ export const Header = () => {
 
   return (
     <>
-      {/* Sticky Header */}
-      <header className="sticky top-0 z-50 w-full border-b border-orange-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80 shadow-sm">
-        <div className="container mx-auto px-4">
-          <div className="flex h-16 items-center justify-between gap-4">
+      {/* Header Bar */}
+      <header className="sticky top-0 z-50 w-full border-b border-orange-200/60 bg-white/95 backdrop-blur-md shadow-sm">
+        <div className="container mx-auto px-4 lg:px-6">
+          <div className="flex h-16 items-center justify-between">
 
-            {/* Logo & Brand */}
-            <Link to="/" className="flex items-center gap-3">
-              {/* Real logo image */}
-              <div className="relative h-11 w-11 overflow-hidden rounded-full bg-white shadow-lg ring-2 ring-orange-300">
+            {/* Logo */}
+            <Link to="/" className="flex items-center gap-3 group">
+              <div className="relative h-10 w-10 overflow-hidden rounded-xl shadow-lg ring-2 ring-orange-300/50 transition-transform group-hover:scale-105">
                 <img
                   src="/logo.jpeg"
-                  alt="AlTawakkalfoods Logo"
+                  alt="AlTawakkalfoods"
                   className="w-full h-full object-cover"
                 />
               </div>
-
-              {/* Brand text: hidden on mobile, visible from sm+ */}
               <div className="hidden sm:block">
-                <h1 className="font-bold text-xl leading-tight text-orange-700">
+                <h1 className="text-xl font-bold bg-gradient-to-r from-orange-600 to-amber-600 bg-clip-text text-transparent">
                   AlTawakkalfoods
                 </h1>
-                <p className="text-xs text-amber-800">Authentic Pakistani Cuisine</p>
+                <p className="text-xs text-amber-700/80">Authentic Pakistani Taste</p>
               </div>
             </Link>
 
-            {/* Desktop Navigation – visible only on lg+ */}
+            {/* Desktop Nav */}
             <nav className="hidden lg:flex items-center gap-10">
               {[
                 { to: "/", label: "Home" },
@@ -89,178 +89,193 @@ export const Header = () => {
                 <Link
                   key={to}
                   to={to}
-                  className="text-base font-medium text-gray-700 transition-colors hover:text-orange-600"
+                  className="text-base font-medium text-gray-700 hover:text-orange-600 transition-colors"
                 >
                   {label}
                 </Link>
               ))}
             </nav>
 
-            {/* Right-side Actions */}
-            <div className="flex items-center gap-3">
+            {/* Right Actions */}
+            <div className="flex items-center gap-3 md:gap-5">
 
-              {/* Select Area Button – hidden on small screens */}
+              {/* Area Selector (Desktop) */}
               <Button
                 variant="outline"
-                className="hidden md:flex items-center gap-2 rounded-full text-sm border-orange-300 text-orange-700 hover:bg-orange-50"
+                size="sm"
+                className="hidden md:flex items-center gap-2 border-orange-300 text-orange-700 hover:bg-orange-50"
                 onClick={() => setAreaModalOpen(true)}
-                aria-label="Select delivery area"
               >
                 <MapPin className="h-4 w-4" />
-                <span className="hidden xl:inline">Select Area</span>
+                <span className="hidden xl:inline">Delivery Area</span>
               </Button>
 
-              {/* Cart Button with Badge */}
+              {/* Cart */}
               <Button
                 variant="ghost"
                 size="icon"
-                className="relative h-11 w-11 rounded-full hover:bg-orange-50"
+                className="relative h-10 w-10 rounded-full hover:bg-orange-50 transition-colors"
                 onClick={() => navigate("/cart")}
-                aria-label={`Cart with ${cartCount} items`}
+                aria-label={`Shopping cart (${cartCount} items)`}
               >
                 <ShoppingCart className="h-5 w-5 text-gray-800" />
                 {cartCount > 0 && (
-                  <Badge
-                    className="absolute -top-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full p-0 text-xs font-bold bg-orange-600 text-white border-2 border-white"
-                  >
-                    {cartCount}
+                  <Badge className="absolute -top-1 -right-1 h-5 w-5 p-0 text-[10px] bg-orange-600 border-2 border-white flex items-center justify-center">
+                    {cartCount > 9 ? '9+' : cartCount}
                   </Badge>
                 )}
               </Button>
 
-              {/* Desktop Auth Controls – visible from sm+ */}
-              {isLoggedIn ? (
-                <>
+              {/* Notifications */}
+              <NotificationCenter />
+
+              {/* Auth / User (Desktop) */}
+              <div className="hidden md:flex items-center gap-4">
+                {isLoggedIn ? (
+                  <>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="gap-2 hover:bg-orange-50"
+                      onClick={() => navigate("/dashboard")}
+                    >
+                      <User className="h-4 w-4" />
+                      {user?.name?.split(" ")[0] || "Account"}
+                    </Button>
+
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="hover:bg-orange-50"
+                      onClick={handleLogout}
+                    >
+                      <LogOut className="h-5 w-5 text-red-600" />
+                    </Button>
+                  </>
+                ) : (
                   <Button
-                    variant="ghost"
                     size="sm"
-                    className="hidden sm:flex items-center gap-2 hover:bg-orange-50"
-                    onClick={() => navigate("/dashboard")}
+                    className="bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-700 hover:to-amber-700 text-white rounded-full px-6"
+                    onClick={() => navigate("/login")}
                   >
-                    <User className="h-5 w-5 text-gray-800" />
-                    <span className="hidden md:inline text-gray-800 font-medium">
-                      {user?.name.split(" ")[0]}
-                    </span>
+                    Login
                   </Button>
+                )}
+              </div>
 
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="hidden sm:block hover:bg-orange-50"
-                    onClick={handleLogout}
-                    aria-label="Logout"
-                  >
-                    <LogOut className="h-5 w-5 text-gray-800" />
-                  </Button>
-                </>
-              ) : (
-                <Button
-                  className="hidden sm:flex text-sm bg-orange-600 hover:bg-orange-700 text-white rounded-full px-6"
-                  onClick={() => navigate("/login")}
-                >
-                  Login
-                </Button>
-              )}
-
-              {/* Mobile Menu Trigger */}
+              {/* Mobile Menu Button */}
               <Button
                 variant="ghost"
                 size="icon"
-                className="lg:hidden h-11 w-11 rounded-full hover:bg-orange-50"
+                className="lg:hidden"
                 onClick={() => setMobileMenuOpen(true)}
-                aria-label="Open menu"
               >
-                <Menu className="h-6 w-6 text-gray-800" />
+                <Menu className="h-6 w-6" />
               </Button>
             </div>
           </div>
         </div>
       </header>
 
-      {/* Mobile Slide-out Menu */}
+      {/* Mobile Menu Sheet */}
       <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
-        <SheetContent side="right" className="w-full sm:w-96 bg-white/95 backdrop-blur">
+        <SheetContent side="right" className="w-full sm:w-80 bg-white/95 backdrop-blur-lg">
           <SheetHeader>
-            <SheetTitle className="text-2xl font-bold text-orange-700">Menu</SheetTitle>
+            <SheetTitle className="text-2xl font-bold bg-gradient-to-r from-orange-600 to-amber-600 bg-clip-text text-transparent">
+              AlTawakkalfoods
+            </SheetTitle>
           </SheetHeader>
 
-          <nav className="mt-10 space-y-4">
-            {/* Area Selection */}
-            <Button
-              variant="ghost"
-              className="w-full justify-start text-lg hover:bg-orange-50"
-              onClick={() => {
-                setMobileMenuOpen(false);
-                setAreaModalOpen(true);
-              }}
-            >
-              <MapPin className="mr-4 h-6 w-6 text-orange-600" />
-              Select Delivery Area
-            </Button>
-
-            <Separator className="bg-orange-200" />
-
-            {/* Main Navigation Links */}
-            {[
-              { to: "/", label: "Home" },
-              { to: "/menu/all", label: "Menu" },
-              { to: "/about", label: "About" },
-              { to: "/contact", label: "Contact" },
-            ].map(({ to, label }) => (
-              <Link
-                key={to}
-                to={to}
-                onClick={() => setMobileMenuOpen(false)}
-                className="block"
+          <div className="mt-8 space-y-6">
+            {/* Quick Actions */}
+            <div className="space-y-3">
+              <Button
+                variant="outline"
+                className="w-full justify-start text-lg gap-3 border-orange-300"
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  setAreaModalOpen(true);
+                }}
               >
-                <Button variant="ghost" className="w-full justify-start text-lg hover:bg-orange-50">
-                  {label}
-                </Button>
-              </Link>
-            ))}
+                <MapPin className="h-5 w-5 text-orange-600" />
+                Select Delivery Area
+              </Button>
 
-            <Separator className="bg-orange-200" />
+              <Button
+                variant="outline"
+                className="w-full justify-start text-lg gap-3 border-orange-300"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                <Bell className="h-5 w-5 text-orange-600" />
+                Notifications
+              </Button>
+            </div>
+
+            <Separator className="bg-orange-200/50" />
+
+            {/* Main Links */}
+            <nav className="space-y-2">
+              {[
+                { to: "/", label: "Home" },
+                { to: "/menu/all", label: "Menu" },
+                { to: "/about", label: "About" },
+                { to: "/contact", label: "Contact" },
+              ].map(({ to, label }) => (
+                <Link
+                  key={to}
+                  to={to}
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="block"
+                >
+                  <Button variant="ghost" className="w-full justify-start text-lg">
+                    {label}
+                  </Button>
+                </Link>
+              ))}
+            </nav>
+
+            <Separator className="bg-orange-200/50" />
 
             {/* Auth Section */}
             {isLoggedIn ? (
-              <>
+              <div className="space-y-3">
                 <Button
-                  variant="ghost"
-                  className="w-full justify-start text-lg hover:bg-orange-50"
+                  variant="outline"
+                  className="w-full justify-start text-lg gap-3"
                   onClick={() => {
                     setMobileMenuOpen(false);
                     navigate("/dashboard");
                   }}
                 >
-                  <User className="mr-4 h-6 w-6 text-orange-600" />
-                  Dashboard
+                  <User className="h-5 w-5" />
+                  My Account
                 </Button>
 
                 <Button
-                  variant="ghost"
-                  className="w-full justify-start text-lg text-red-600 hover:bg-red-50"
+                  variant="outline"
+                  className="w-full justify-start text-lg gap-3 text-red-600 border-red-300 hover:bg-red-50"
                   onClick={handleLogout}
                 >
-                  <LogOut className="mr-4 h-6 w-6" />
+                  <LogOut className="h-5 w-5" />
                   Logout
                 </Button>
-              </>
+              </div>
             ) : (
               <Button
-                className="w-full text-lg bg-orange-600 hover:bg-orange-700 text-white rounded-xl py-6"
+                className="w-full py-6 text-lg bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-700 hover:to-amber-700"
                 onClick={() => {
                   setMobileMenuOpen(false);
                   navigate("/login");
                 }}
               >
-                Login
+                Login / Sign Up
               </Button>
             )}
-          </nav>
+          </div>
         </SheetContent>
       </Sheet>
 
-      {/* Service Area Selection Modal */}
+      {/* Area Selection Modal */}
       <ServiceAreaModal
         isOpen={areaModalOpen}
         onClose={() => setAreaModalOpen(false)}

@@ -1,9 +1,7 @@
 // src/lib/socket.ts
 import { io, Socket, ManagerOptions, SocketOptions } from "socket.io-client";
+import { useAuthStore } from "@/features/auth/store/authStore";
 
-/**
- * Socket base URL
- */
 const SOCKET_URL =
   import.meta.env.VITE_SOCKET_URL ||
   import.meta.env.VITE_API_URL?.replace("/api", "") ||
@@ -13,9 +11,6 @@ console.log("🌐 Socket.IO URL:", SOCKET_URL);
 
 let socket: Socket | null = null;
 
-/**
- * Initialize or return existing Socket.IO connection
- */
 export const initSocket = (): Socket | null => {
   if (socket?.connected) return socket;
   if (socket) return socket;
@@ -25,7 +20,7 @@ export const initSocket = (): Socket | null => {
   const options: Partial<ManagerOptions & SocketOptions> = {
     transports: ["websocket", "polling"],
     reconnection: true,
-    reconnectionAttempts: 10,
+    reconnectionAttempts: Infinity,
     reconnectionDelay: 1000,
     reconnectionDelayMax: 5000,
     timeout: 20000,
@@ -38,13 +33,17 @@ export const initSocket = (): Socket | null => {
 
   socket.on("connect", () => {
     console.log("✅ Socket.IO connected:", socket?.id);
+
+    const { user } = useAuthStore.getState();
+    if (user?.role === "admin" || user?.role === "kitchen") {
+      socket?.emit("join", "admin");
+      socket?.emit("join", "kitchen");
+      console.log("🏠 Auto-joined admin & kitchen rooms");
+    }
   });
 
   socket.on("disconnect", (reason) => {
     console.warn("⚠️ Socket.IO disconnected:", reason);
-    if (reason === "io server disconnect") {
-      socket?.connect();
-    }
   });
 
   socket.on("connect_error", (error) => {
@@ -59,22 +58,11 @@ export const initSocket = (): Socket | null => {
   return socket;
 };
 
-/**
- * Get current socket instance
- */
 export const getSocket = (): Socket | null => {
   if (!socket) initSocket();
   return socket;
 };
 
-/**
- * Export the raw socket for use in context/hooks
- */
-export { socket };
-
-/**
- * Disconnect and cleanup
- */
 export const disconnectSocket = (): void => {
   if (socket) {
     socket.disconnect();
@@ -83,9 +71,6 @@ export const disconnectSocket = (): void => {
   }
 };
 
-/**
- * Join/leave rooms
- */
 export const joinRoom = (room: string): void => {
   const s = getSocket();
   if (s?.connected) {
@@ -102,9 +87,6 @@ export const leaveRoom = (room: string): void => {
   }
 };
 
-/**
- * Reconnect with new token (after login/logout)
- */
 export const reconnectWithNewToken = (): void => {
   disconnectSocket();
   initSocket();
