@@ -1,6 +1,7 @@
 // src/features/admin/pages/AdminOrdersPage.tsx
-// FINAL PRODUCTION — JANUARY 12, 2026
-// Modern admin orders list: filter, rider assignment, status update, real-time feel
+// FINAL PRODUCTION — JANUARY 13, 2026
+// Role-aware status dropdown + rider assignment visibility
+// FIXED: proper no-op guard in handleStatusChange
 
 import { useState } from 'react';
 import {
@@ -22,12 +23,12 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Loader2, AlertCircle } from 'lucide-react';
+import { AlertCircle, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
-import { useAdminOrders } from '@/features/orders/hooks/useOrders';
-import { useUpdateOrderStatus, useAssignRider } from '@/features/orders/hooks/useOrders';
+import { useAdminOrders, useUpdateOrderStatus, useAssignRider } from '@/features/orders/hooks/useOrders';
 import { useAvailableRidersForAssignment } from '@/features/riders/hooks/useAdminRiders';
+import { useAuthStore } from '@/features/auth/store/authStore';
 import { Link } from 'react-router-dom';
 import { ORDER_STATUS_LABELS, ORDER_STATUS_COLORS } from '@/types/order.types';
 
@@ -35,7 +36,10 @@ const ITEMS_PER_PAGE = 20;
 
 export default function AdminOrdersPage() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [page, setPage] = useState(1);
+  const [page, setPage] = useState<number>(1);
+
+  const { user } = useAuthStore();
+  const currentUserRole = user?.role || 'unknown';
 
   const { data, isLoading, isFetching } = useAdminOrders({
     status: statusFilter === 'all' ? undefined : statusFilter,
@@ -52,23 +56,63 @@ export default function AdminOrdersPage() {
     ? Math.ceil(data.pagination.total / ITEMS_PER_PAGE)
     : 1;
 
-  const handleStatusChange = (orderId: string, newStatus: string) => {
-    updateStatus.mutate(
-      { orderId, status: newStatus as any },
-      {
-        onSuccess: () => toast.success(`Order status updated to ${ORDER_STATUS_LABELS[newStatus] || newStatus}`),
-        onError: () => toast.error('Failed to update status'),
-      }
-    );
+  // ── Role-based allowed statuses (must match backend logic) ──────────────
+  const getAllowedStatuses = () => {
+    switch (currentUserRole) {
+      case 'kitchen':
+        return ['confirmed', 'preparing'];
+      case 'rider':
+        return ['out_for_delivery', 'delivered'];
+      case 'admin':
+      case 'delivery_manager':
+      case 'support':
+      case 'finance':
+        return ['confirmed', 'preparing', 'out_for_delivery', 'delivered', 'rejected'];
+      default:
+        return ['confirmed', 'preparing']; // safest fallback
+    }
   };
 
+  const allowedStatuses = getAllowedStatuses();
+
+  const canAssignRider = ['admin', 'delivery_manager'].includes(currentUserRole);
+
+const handleStatusChange = (
+  orderId: string,
+  newStatus: string,
+  currentStatus: string   // ← pass this as third param
+) => {
+  if (newStatus === currentStatus) {
+    // Optional: show a silent toast or nothing
+    // toast.info("Status is already set to this value");
+    return;
+  }
+    updateStatus.mutate(
+    { orderId, status: newStatus as any },
+    {
+      onSuccess: () => {
+        toast.success(`Status updated to ${ORDER_STATUS_LABELS[newStatus] || newStatus}`);
+      },
+      onError: (err: any) => {
+        const msg = err?.response?.data?.message 
+          || `Failed to update (current: ${currentStatus}, tried: ${newStatus})`;
+        toast.error(msg, { duration: 7000 });
+      },
+    }
+  );
+};
   const handleAssignRider = (orderId: string, riderId: string) => {
-    if (!riderId) return;
+    if (!riderId || riderId === 'none') return;
+
     assignRider.mutate(
       { orderId, riderId },
       {
         onSuccess: () => toast.success('Rider assigned successfully'),
-        onError: () => toast.error('Failed to assign rider'),
+        onError: (err: any) => {
+          toast.error(
+            err?.response?.data?.message || 'Failed to assign rider'
+          );
+        },
       }
     );
   };
@@ -78,9 +122,7 @@ export default function AdminOrdersPage() {
       <Card className="shadow-2xl border-orange-200/50">
         <CardHeader className="bg-gradient-to-r from-orange-50 to-amber-50 dark:from-gray-900">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <CardTitle className="text-2xl md:text-3xl font-bold">
-              All Orders
-            </CardTitle>
+            <CardTitle className="text-2xl md:text-3xl font-bold">All Orders</CardTitle>
 
             <Select
               value={statusFilter}
@@ -158,7 +200,9 @@ export default function AdminOrdersPage() {
 
                         <TableCell>
                           <Badge
-                            className={`font-medium ${ORDER_STATUS_COLORS[order.status]} text-white px-4 py-1.5`}
+                            className={`font-medium ${
+                              ORDER_STATUS_COLORS[order.status] || 'bg-gray-500'
+                            } text-white px-4 py-1.5`}
                           >
                             {ORDER_STATUS_LABELS[order.status] || order.status}
                           </Badge>
@@ -181,43 +225,61 @@ export default function AdminOrdersPage() {
                           )}
                         </TableCell>
 
-                        <TableCell className="text-right space-x-2">
-                          {/* Status Dropdown */}
+                        <TableCell className="text-right space-x-3">
+                          {/* Status Dropdown – only show allowed options */}
                           <Select
-                            disabled={updateStatus.isPending}
-                            value={order.status}
-                            onValueChange={(val) => handleStatusChange(order._id, val)}
-                          >
-                            <SelectTrigger className="w-40 inline-flex">
+  disabled={updateStatus.isPending}
+  value={order.status}
+  onValueChange={(val) => handleStatusChange(order._id, val, order.status)}
+>
+                            <SelectTrigger className="w-44 inline-flex">
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                              {['confirmed', 'preparing', 'out_for_delivery', 'delivered', 'rejected'].map((st) => (
-                                <SelectItem key={st} value={st} disabled={order.status === st}>
-                                  {ORDER_STATUS_LABELS[st]}
+                              {allowedStatuses.map((st) => (
+                                <SelectItem
+                                  key={st}
+                                  value={st}
+                                  disabled={order.status === st}
+                                >
+                                  {ORDER_STATUS_LABELS[st] || st}
                                 </SelectItem>
                               ))}
                             </SelectContent>
                           </Select>
 
-                          {/* Rider Assignment */}
-                          {!order.rider && (
-                            <Select
-                              disabled={assignRider.isPending || ridersLoading}
-                              onValueChange={(riderId) => handleAssignRider(order._id, riderId)}
-                            >
-                              <SelectTrigger className="w-44 inline-flex">
-                                <SelectValue placeholder={ridersLoading ? 'Loading...' : 'Assign Rider'} />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {riders.map((rider) => (
-                                  <SelectItem key={rider._id} value={rider._id}>
-                                    {rider.name} ({rider.phone}) {rider.isOnline ? '🟢' : '⚫'}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          )}
+                          {/* Rider Assignment – only visible to admin / delivery_manager */}
+{canAssignRider && !order.rider && (
+  <Select
+    disabled={assignRider.isPending || ridersLoading}
+    onValueChange={(riderId) => handleAssignRider(order._id, riderId)}
+  >
+    <SelectTrigger className="w-48 inline-flex">
+      <SelectValue
+        placeholder={
+          ridersLoading ? 'Loading riders...' : 
+          riders.length === 0 ? 'No available riders' : 
+          'Assign Rider'
+        }
+      />
+    </SelectTrigger>
+    <SelectContent>
+      {riders.length > 0 ? (
+        riders.map((rider) => (
+          <SelectItem key={rider._id} value={rider._id}>
+            {rider.name} ({rider.phone.slice(-10)}) 
+            {rider.isOnline ? ' 🟢' : ' ⚫'} 
+            {rider.rating ? `★${rider.rating.toFixed(1)}` : ''}
+          </SelectItem>
+        ))
+      ) : !ridersLoading ? (
+        <SelectItem value="none" disabled>No available riders online</SelectItem>
+      ) : (
+        <SelectItem value="none" disabled>Loading...</SelectItem>
+      )}
+    </SelectContent>
+  </Select>
+)}
                         </TableCell>
                       </TableRow>
                     ))}
@@ -225,12 +287,12 @@ export default function AdminOrdersPage() {
                 </Table>
               </div>
 
-              {/* Pagination & Info */}
+              {/* Pagination & Summary */}
               <div className="flex flex-col sm:flex-row justify-between items-center gap-6 mt-8">
                 <p className="text-sm text-muted-foreground">
                   Showing {(page - 1) * ITEMS_PER_PAGE + 1}–
-                  {Math.min(page * ITEMS_PER_PAGE, data.pagination?.total || 0)} of{' '}
-                  {data.pagination?.total || 0} orders
+                  {Math.min(page * ITEMS_PER_PAGE, data?.pagination?.total || 0)} of{' '}
+                  {data?.pagination?.total || 0} orders
                 </p>
 
                 {totalPages > 1 && (

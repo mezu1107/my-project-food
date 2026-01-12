@@ -37,16 +37,17 @@ export interface RiderStats {
   pending: number;
   rejected: number;
 }
-
 export interface AdminRidersResponse {
-  success: true;
+  success: boolean;
   riders: AdminRider[];
-  pagination: {
+  pagination?: {
     total: number;
     page: number;
     limit: number;
     pages: number;
+    availableCount?: number;
   };
+  message?: string;
 }
 
 export interface RiderStatsResponse {
