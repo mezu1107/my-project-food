@@ -1,6 +1,5 @@
 // src/App.tsx
 // PRODUCTION-READY — JANUARY 11, 2026 (FIXED)
-// No more "No QueryClient set" error — hooks now live inside providers
 
 import { useEffect } from 'react';
 import { Toaster } from "@/components/ui/toaster";
@@ -8,6 +7,8 @@ import { Toaster as Sonner } from "sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { HelmetProvider } from "react-helmet-async";
+import { RiderProvider } from "@/features/riders/context/RiderContext";
+
 import {
   createBrowserRouter,
   RouterProvider,
@@ -18,28 +19,23 @@ import { initPushNotifications } from '@/lib/pushNotifications';
 import { audioManager } from '@/features/notifications/store/notificationStore';
 import { useGlobalOrderNotifications } from '@/features/orders/hooks/useGlobalOrderNotifications';
 
-// NEW: Wrapper component for global hooks & initializations
+// ── Global initializer ──
 function GlobalInitializer() {
   useEffect(() => {
-    // Preload notification sounds
     audioManager.preload();
-
-    // Initialize Web Push Notifications
     initPushNotifications();
 
-    // Cleanup (optional, safe)
     return () => {
       audioManager.cleanup();
     };
   }, []);
 
-  // Global real-time order notifications (now SAFE inside QueryClientProvider)
   useGlobalOrderNotifications();
 
-  return null; // This component renders nothing — just runs effects
+  return null;
 }
 
-// ── Layouts & Pages (unchanged) ──
+// ── Layouts & Pages ──
 import { PublicLayout } from "./components/PublicLayout";
 import AdminLayout from "./components/admin/AdminLayout";
 import RiderLayout from "./components/rider/RiderLayout";
@@ -100,7 +96,13 @@ import KitchenDashboard from "./pages/kitchen/KitchenDashboard";
 
 import DebugAPI from "./pages/DebugAPI";
 
-// ── Query Client (unchanged) ──
+// ── Rider Pages ──
+import RiderHome from "@/features/riders/pages/RiderHome";
+import RiderProfile from "@/features/riders/pages/RiderProfile";
+import OrderHistory from "@/features/riders/pages/OrderHistory";
+import ApplyRider from "@/features/riders/pages/ApplyRider";
+
+// ── Query Client ──
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -111,7 +113,7 @@ const queryClient = new QueryClient({
   },
 });
 
-// ── Router (unchanged — your full router) ──
+// ── Router ──
 const router = createBrowserRouter([
   {
     element: <PublicLayout />,
@@ -175,17 +177,27 @@ const router = createBrowserRouter([
       { path: "display", element: <KitchenDisplay /> },
     ],
   },
-  {
-    path: "/rider",
-    element: <RiderLayout />,
-    children: [],
-  },
+ {
+  path: "/rider",
+  element: (
+    <RiderProvider>
+      <RiderLayout />
+    </RiderProvider>
+  ),
+  children: [
+    { index: true, element: <RiderHome /> },
+    { path: "profile", element: <RiderProfile /> },
+    { path: "orders", element: <OrderHistory /> },
+    { path: "apply", element: <ApplyRider /> },
+  ],
+},
   {
     path: "*",
     element: <NotFound />,
   },
 ]);
 
+// ── App Component ──
 export default function App() {
   return (
     <HelmetProvider>
@@ -194,7 +206,7 @@ export default function App() {
           <Toaster />
           <Sonner />
 
-          {/* All global hooks & effects now live here — inside providers */}
+          {/* Global hooks & effects */}
           <GlobalInitializer />
 
           <SocketProvider>

@@ -118,12 +118,17 @@ export function useToggleAvailability() {
 }
 
 /** Accept an assigned order */
+// src/features/riders/hooks/useRiderApi.ts (or useRiders.ts)
+
 export function useAcceptOrder() {
   const qc = useQueryClient();
 
   return useMutation({
-    mutationFn: async (orderId: string) => {
-      const response = await apiClient.patch<RiderActionResponse>(`/rider/orders/${orderId}/accept`);
+    mutationFn: async ({ orderId, reason }: { orderId: string; reason?: string }) => {
+      const response = await apiClient.patch<RiderActionResponse>(
+        `/rider/orders/${orderId}/accept`,
+        reason ? { reason } : {} // only send reason if provided
+      );
       return response;
     },
     onSuccess: () => {
