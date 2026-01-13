@@ -1,4 +1,3 @@
-// src/features/riders/components/StatusToggle.tsx
 'use client';
 
 import { useRider } from '../context/RiderContext';
@@ -16,6 +15,7 @@ export function StatusToggle() {
   if (!profile) return null;
 
   const isApproved = profile.riderStatus === 'approved';
+  const isOffline = !profile.isOnline;
 
   if (!isApproved) {
     return (
@@ -35,7 +35,11 @@ export function StatusToggle() {
           profile.isAvailable ? 'text-green-600' : 'text-muted-foreground'
         )}
       >
-        {profile.isAvailable ? 'Online' : 'Offline'}
+        {isOffline
+          ? 'Offline'
+          : profile.isAvailable
+          ? 'Available'
+          : 'Unavailable'}
       </Label>
 
       <div className="relative">
@@ -43,7 +47,7 @@ export function StatusToggle() {
           id="availability-toggle"
           checked={profile.isAvailable}
           onCheckedChange={() => toggleAvailability.mutate()}
-          disabled={toggleAvailability.isPending}
+          disabled={toggleAvailability.isPending || isOffline}
           className={cn(
             'data-[state=checked]:bg-green-600 data-[state=checked]:border-green-600',
             toggleAvailability.isPending && 'opacity-70'

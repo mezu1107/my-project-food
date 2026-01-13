@@ -54,6 +54,7 @@ export type OrderStatus =
   | 'cancelled'
   | 'rejected';
 
+
 export type PaymentStatus =
   | 'pending'
   | 'paid'

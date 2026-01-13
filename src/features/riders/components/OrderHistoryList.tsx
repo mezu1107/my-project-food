@@ -42,7 +42,6 @@ export default function OrderHistoryList() {
     </div>
   );
 }
-
 function OrderHistoryItem({ order }: { order: RiderOrder }) {
   const isDelivered = order.status === 'delivered';
   const deliveredDate = order.deliveredAt ? new Date(order.deliveredAt) : null;
@@ -55,7 +54,7 @@ function OrderHistoryItem({ order }: { order: RiderOrder }) {
             <div>
               <h3 className="font-medium">Order #{order._id.slice(-6)}</h3>
               <p className="text-sm text-muted-foreground mt-1">
-                {format(new Date(order.placedAt), 'dd MMM yyyy • hh:mm a')}
+                {order.placedAt ? format(new Date(order.placedAt), 'dd MMM yyyy • hh:mm a') : 'Date unavailable'}
               </p>
             </div>
 
@@ -89,8 +88,8 @@ function OrderHistoryItem({ order }: { order: RiderOrder }) {
                 <Clock className="h-4 w-4 text-muted-foreground" />
                 <span className="text-sm font-medium">Customer</span>
               </div>
-              <p className="text-sm">{order.customer.name}</p>
-              <p className="text-xs text-muted-foreground">{order.customer.phone}</p>
+              <p className="text-sm">{order.customer?.name || 'Unknown Customer'}</p>
+              <p className="text-xs text-muted-foreground">{order.customer?.phone || 'N/A'}</p>
             </div>
 
             <div>
@@ -98,21 +97,21 @@ function OrderHistoryItem({ order }: { order: RiderOrder }) {
                 <MapPin className="h-4 w-4 text-muted-foreground" />
                 <span className="text-sm font-medium">Area</span>
               </div>
-              <p className="text-sm">{order.area.name}</p>
+              <p className="text-sm">{order.area?.name || 'Unknown Area'}</p>
             </div>
           </div>
 
-          {/* Amount & Status */}
+          {/* Amount & Items */}
           <div className="flex justify-between items-center pt-4 border-t">
             <div className="flex items-center gap-2">
               <DollarSign className="h-5 w-5 text-green-600" />
               <span className="font-bold text-lg">
-                PKR {order.finalAmount.toLocaleString()}
+                PKR {order.finalAmount?.toLocaleString() || '0'}
               </span>
             </div>
 
             <Badge variant="outline" className="text-sm">
-              {order.items.length} item{order.items.length !== 1 ? 's' : ''}
+              {order.items?.length || 0} item{(order.items?.length || 0) !== 1 ? 's' : ''}
             </Badge>
           </div>
         </div>

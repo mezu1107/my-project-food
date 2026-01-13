@@ -20,6 +20,7 @@ import type {
   CreateOrderResponse,
   ReorderResponse,
   TrackOrderResponse,
+  OrderStatus,
 } from '@/types/order.types';
 
 // ============================================================
@@ -327,29 +328,39 @@ export const downloadReceipt = async (orderId: string) => {
 // ADMIN / KITCHEN / RIDER OPERATIONS
 // ============================================================
 
+
+
 export const useUpdateOrderStatus = () => {
   const queryClient = useQueryClient();
 
   return useMutation<
     OrderResponse,
     Error,
-    { orderId: string; status: 'confirmed' | 'preparing' | 'out_for_delivery' | 'delivered' | 'rejected' }
+    { orderId: string; status: OrderStatus }
   >({
     mutationFn: async ({ orderId, status }) => {
-      const { data } = await api.patch<OrderResponse>(`/orders/${orderId}/status`, { status });
+      const { data } = await api.patch<OrderResponse>(
+        `/orders/${orderId}/status`,
+        { status }
+      );
       return data;
     },
     onSuccess: (data, { orderId }) => {
       const updatedOrder = data.order;
 
       queryClient.setQueryData(['order', orderId], updatedOrder);
-      queryClient.setQueryData(['track-order', orderId], { success: true, order: updatedOrder });
+      queryClient.setQueryData(['track-order', orderId], {
+        success: true,
+        order: updatedOrder,
+      });
 
       queryClient.invalidateQueries({ queryKey: ['my-orders'] });
       queryClient.invalidateQueries({ queryKey: ['admin-orders'] });
       queryClient.invalidateQueries({ queryKey: ['order-timeline', orderId] });
 
-      toast.success(`Status updated → ${updatedOrder.status.replace(/_/g, ' ')}`);
+      toast.success(
+        `Status updated → ${updatedOrder.status.replace(/_/g, ' ')}`
+      );
     },
     onError: (error: any) => {
       toast.error(error.response?.data?.message || 'Failed to update status');

@@ -94,23 +94,29 @@ export function useToggleAvailability() {
 
   return useMutation({
     mutationFn: async () => {
-      const response = await apiClient.patch<RiderActionResponse>('/rider/availability');
-      return response;
+      return apiClient.patch<RiderActionResponse>('/rider/availability');
     },
+
     onSuccess: (data) => {
-      qc.setQueryData(['rider', 'profile'], (old: any) => {
-        if (!old?.rider) return old;
-        return {
-          ...old,
-          rider: {
-            ...old.rider,
-            isOnline: data.isOnline,
-            isAvailable: data.isAvailable,
-          },
-        };
-      });
-      toast.success(data.isAvailable ? 'You are now online!' : 'You are now offline');
+      qc.setQueryData<RiderProfile | null>(
+        ['rider', 'profile'],
+        (old) => {
+          if (!old) return old;
+          return {
+            ...old,
+            isOnline: data.isOnline ?? old.isOnline,
+            isAvailable: data.isAvailable ?? old.isAvailable,
+          };
+        }
+      );
+
+      toast.success(
+        data.isAvailable
+          ? 'You are now available for orders'
+          : 'You are temporarily unavailable'
+      );
     },
+
     onError: () => {
       toast.error('Failed to update availability');
     },

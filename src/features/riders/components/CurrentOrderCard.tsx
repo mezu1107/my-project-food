@@ -3,16 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
-import {
-  MapPin,
-  Phone,
-  Package,
-  Clock,
-  DollarSign,
-  CheckCircle2,
-  AlertTriangle,
-} from 'lucide-react';
-
+import { MapPin, Phone, Package, Clock, DollarSign } from 'lucide-react';
 import {
   useAcceptOrder,
   usePickupOrder,
@@ -37,9 +28,8 @@ export default function CurrentOrderCard({ order }: CurrentOrderCardProps) {
 
   const handleCollectCash = () => {
     const amountStr = prompt(
-      `Enter collected amount (should be ≈ PKR ${order.finalAmount.toLocaleString()}):`
+      `Enter collected amount (≈ PKR ${order.finalAmount?.toLocaleString() || 0}):`
     );
-
     if (!amountStr) return;
 
     const amount = Number(amountStr);
@@ -50,9 +40,7 @@ export default function CurrentOrderCard({ order }: CurrentOrderCardProps) {
 
     collectCash.mutate(
       { orderId: order._id, amount },
-      {
-        onError: () => alert('Failed to record cash collection'),
-      }
+      { onError: () => alert('Failed to record cash collection') }
     );
   };
 
@@ -64,10 +52,12 @@ export default function CurrentOrderCard({ order }: CurrentOrderCardProps) {
             <CardTitle className="text-xl">Order #{order._id.slice(-6)}</CardTitle>
             <div className="flex items-center gap-2 mt-1 text-sm text-muted-foreground">
               <Clock className="h-4 w-4" />
-              {new Date(order.placedAt).toLocaleString('en-PK', {
-                dateStyle: 'medium',
-                timeStyle: 'short',
-              })}
+              {order.placedAt
+                ? new Date(order.placedAt).toLocaleString('en-PK', {
+                    dateStyle: 'medium',
+                    timeStyle: 'short',
+                  })
+                : 'N/A'}
             </div>
           </div>
           <Badge
@@ -92,8 +82,10 @@ export default function CurrentOrderCard({ order }: CurrentOrderCardProps) {
           label="Customer"
           content={
             <div>
-              <p className="font-medium">{order.customer.name}</p>
-              <p className="text-sm text-muted-foreground">{order.customer.phone}</p>
+              <p className="font-medium">{order.customer?.name || 'Guest'}</p>
+              <p className="text-sm text-muted-foreground">
+                {order.customer?.phone || 'N/A'}
+              </p>
             </div>
           }
         />
@@ -104,12 +96,12 @@ export default function CurrentOrderCard({ order }: CurrentOrderCardProps) {
           label="Delivery To"
           content={
             <div>
-              <p className="font-medium">{order.address.label || 'Delivery Address'}</p>
-              <p className="text-sm">{order.address.fullAddress}</p>
-              {order.address.floor && (
+              <p className="font-medium">{order.address?.label || 'Delivery Address'}</p>
+              <p className="text-sm">{order.address?.fullAddress || 'N/A'}</p>
+              {order.address?.floor && (
                 <p className="text-sm text-muted-foreground">Floor: {order.address.floor}</p>
               )}
-              {order.address.instructions && (
+              {order.address?.instructions && (
                 <p className="text-sm italic mt-1 border-l-2 border-primary/30 pl-2">
                   {order.address.instructions}
                 </p>
@@ -128,10 +120,10 @@ export default function CurrentOrderCard({ order }: CurrentOrderCardProps) {
             </div>
             <div>
               <h3 className="font-medium">
-                {order.items.length} item{order.items.length !== 1 ? 's' : ''}
+                {order.items?.length || 0} item{(order.items?.length || 0) !== 1 ? 's' : ''}
               </h3>
               <p className="text-sm text-muted-foreground">
-                {order.items.map((item) => item.name).join(', ')}
+                {order.items?.map((item) => item.name).join(', ') || 'N/A'}
               </p>
             </div>
           </div>
@@ -145,7 +137,9 @@ export default function CurrentOrderCard({ order }: CurrentOrderCardProps) {
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Total Amount</p>
-              <p className="text-2xl font-bold">PKR {order.finalAmount.toLocaleString()}</p>
+              <p className="text-2xl font-bold">
+                PKR {order.finalAmount?.toLocaleString() || 0}
+              </p>
             </div>
           </div>
 
@@ -161,24 +155,11 @@ export default function CurrentOrderCard({ order }: CurrentOrderCardProps) {
           {isPending && (
             <div className="grid grid-cols-2 gap-3">
               <Button
-  variant="outline"
-  size="lg"
-  className="h-14 text-base"
-  onClick={() => {
-    const reason = window.prompt('Reason for rejection (optional):');
-    acceptOrder.mutate({ orderId: order._id, reason: reason || undefined });
-  }}
-  disabled={acceptOrder.isPending}
->
-  Reject
-</Button>
-
-              <Button
                 variant="outline"
                 size="lg"
                 className="h-14 text-base"
                 onClick={() => {
-                  const reason = window.prompt('Reason for rejection (optional):');
+                  const reason = prompt('Reason for rejection (optional):');
                   acceptOrder.mutate({ orderId: order._id, reason: reason || undefined });
                 }}
                 disabled={acceptOrder.isPending}
@@ -204,13 +185,8 @@ export default function CurrentOrderCard({ order }: CurrentOrderCardProps) {
                 size="lg"
                 className="w-full h-14 text-base bg-green-600 hover:bg-green-700"
                 onClick={() => {
-                  if (isCashOrder) {
-                    handleCollectCash();
-                  } else {
-                    if (window.confirm('Confirm order delivery?')) {
-                      deliverOrder.mutate(order._id);
-                    }
-                  }
+                  if (isCashOrder) handleCollectCash();
+                  else if (confirm('Confirm order delivery?')) deliverOrder.mutate(order._id);
                 }}
                 disabled={deliverOrder.isPending || collectCash.isPending}
               >
@@ -228,15 +204,7 @@ export default function CurrentOrderCard({ order }: CurrentOrderCardProps) {
   );
 }
 
-function InfoRow({
-  icon,
-  label,
-  content,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  content: React.ReactNode;
-}) {
+function InfoRow({ icon, label, content }: { icon: React.ReactNode; label: string; content: React.ReactNode }) {
   return (
     <div className="flex items-start gap-4">
       <div className="bg-primary/10 p-3 rounded-full mt-0.5">{icon}</div>

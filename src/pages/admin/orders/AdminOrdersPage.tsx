@@ -1,9 +1,13 @@
 // src/features/admin/pages/AdminOrdersPage.tsx
 // FINAL PRODUCTION — JANUARY 13, 2026
-// Role-aware status dropdown + rider assignment visibility
-// FIXED: proper no-op guard in handleStatusChange
+// Role-aware status dropdown + rider assignment
+// Safe no-op guards, strict typing, improved UX
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { AlertCircle, Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
+
 import {
   Table,
   TableBody,
@@ -23,23 +27,25 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { AlertCircle, Loader2 } from 'lucide-react';
-import { toast } from 'sonner';
 
 import { useAdminOrders, useUpdateOrderStatus, useAssignRider } from '@/features/orders/hooks/useOrders';
 import { useAvailableRidersForAssignment } from '@/features/riders/hooks/useAdminRiders';
 import { useAuthStore } from '@/features/auth/store/authStore';
-import { Link } from 'react-router-dom';
-import { ORDER_STATUS_LABELS, ORDER_STATUS_COLORS } from '@/types/order.types';
+
+import {
+  ORDER_STATUS_COLORS,
+  ORDER_STATUS_LABELS,
+  type OrderStatus,
+} from '@/types/order.types';
 
 const ITEMS_PER_PAGE = 20;
 
 export default function AdminOrdersPage() {
-  const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [page, setPage] = useState<number>(1);
+  const [statusFilter, setStatusFilter] = useState<'all' | OrderStatus>('all');
+  const [page, setPage] = useState(1);
 
   const { user } = useAuthStore();
-  const currentUserRole = user?.role || 'unknown';
+  const role = user?.role ?? 'unknown';
 
   const { data, isLoading, isFetching } = useAdminOrders({
     status: statusFilter === 'all' ? undefined : statusFilter,
@@ -47,18 +53,20 @@ export default function AdminOrdersPage() {
     limit: ITEMS_PER_PAGE,
   });
 
-  const { data: riders = [], isLoading: ridersLoading } = useAvailableRidersForAssignment();
+  const { data: riders = [], isLoading: ridersLoading } =
+    useAvailableRidersForAssignment();
 
   const updateStatus = useUpdateOrderStatus();
   const assignRider = useAssignRider();
 
-  const totalPages = data?.pagination?.total
-    ? Math.ceil(data.pagination.total / ITEMS_PER_PAGE)
-    : 1;
+  const totalOrders = data?.pagination?.total ?? 0;
+  const totalPages = Math.max(1, Math.ceil(totalOrders / ITEMS_PER_PAGE));
 
-  // ── Role-based allowed statuses (must match backend logic) ──────────────
-  const getAllowedStatuses = () => {
-    switch (currentUserRole) {
+  // ─────────────────────────────────────────────
+  // Role → allowed order statuses
+  // ─────────────────────────────────────────────
+  const allowedStatuses = useMemo<OrderStatus[]>(() => {
+    switch (role) {
       case 'kitchen':
         return ['confirmed', 'preparing'];
       case 'rider':
@@ -67,40 +75,47 @@ export default function AdminOrdersPage() {
       case 'delivery_manager':
       case 'support':
       case 'finance':
-        return ['confirmed', 'preparing', 'out_for_delivery', 'delivered', 'rejected'];
+        return [
+          'confirmed',
+          'preparing',
+          'out_for_delivery',
+          'delivered',
+          'rejected',
+        ];
       default:
-        return ['confirmed', 'preparing']; // safest fallback
+        return ['confirmed', 'preparing'];
     }
+  }, [role]);
+
+  const canAssignRider = role === 'admin' || role === 'delivery_manager';
+
+  // ─────────────────────────────────────────────
+  // Handlers
+  // ─────────────────────────────────────────────
+  const handleStatusChange = (
+    orderId: string,
+    newStatus: OrderStatus,
+    currentStatus: OrderStatus
+  ) => {
+    if (newStatus === currentStatus) return;
+
+    updateStatus.mutate(
+      { orderId, status: newStatus },
+      {
+        onSuccess: () =>
+          toast.success(
+            `Status updated to ${ORDER_STATUS_LABELS[newStatus]}`
+          ),
+        onError: (err: any) =>
+          toast.error(
+            err?.response?.data?.message ??
+              `Failed to update order status`,
+            { duration: 7000 }
+          ),
+      }
+    );
   };
 
-  const allowedStatuses = getAllowedStatuses();
-
-  const canAssignRider = ['admin', 'delivery_manager'].includes(currentUserRole);
-
-const handleStatusChange = (
-  orderId: string,
-  newStatus: string,
-  currentStatus: string   // ← pass this as third param
-) => {
-  if (newStatus === currentStatus) {
-    // Optional: show a silent toast or nothing
-    // toast.info("Status is already set to this value");
-    return;
-  }
-    updateStatus.mutate(
-    { orderId, status: newStatus as any },
-    {
-      onSuccess: () => {
-        toast.success(`Status updated to ${ORDER_STATUS_LABELS[newStatus] || newStatus}`);
-      },
-      onError: (err: any) => {
-        const msg = err?.response?.data?.message 
-          || `Failed to update (current: ${currentStatus}, tried: ${newStatus})`;
-        toast.error(msg, { duration: 7000 });
-      },
-    }
-  );
-};
   const handleAssignRider = (orderId: string, riderId: string) => {
     if (!riderId || riderId === 'none') return;
 
@@ -108,26 +123,31 @@ const handleStatusChange = (
       { orderId, riderId },
       {
         onSuccess: () => toast.success('Rider assigned successfully'),
-        onError: (err: any) => {
+        onError: (err: any) =>
           toast.error(
-            err?.response?.data?.message || 'Failed to assign rider'
-          );
-        },
+            err?.response?.data?.message ??
+              'Failed to assign rider'
+          ),
       }
     );
   };
 
+  // ─────────────────────────────────────────────
+  // UI
+  // ─────────────────────────────────────────────
   return (
     <div className="container mx-auto py-8 px-4">
       <Card className="shadow-2xl border-orange-200/50">
         <CardHeader className="bg-gradient-to-r from-orange-50 to-amber-50 dark:from-gray-900">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <CardTitle className="text-2xl md:text-3xl font-bold">All Orders</CardTitle>
+            <CardTitle className="text-2xl md:text-3xl font-bold">
+              All Orders
+            </CardTitle>
 
             <Select
               value={statusFilter}
               onValueChange={(val) => {
-                setStatusFilter(val);
+                setStatusFilter(val as any);
                 setPage(1);
               }}
             >
@@ -157,34 +177,34 @@ const handleStatusChange = (
           ) : !data?.orders?.length ? (
             <div className="text-center py-20">
               <AlertCircle className="h-16 w-16 text-orange-600 mx-auto mb-6" />
-              <h3 className="text-2xl font-bold mb-4">No orders found</h3>
+              <h3 className="text-2xl font-bold mb-4">
+                No orders found
+              </h3>
               <p className="text-muted-foreground">
-                {statusFilter !== 'all'
-                  ? `No orders with status "${ORDER_STATUS_LABELS[statusFilter] || statusFilter}"`
-                  : 'No orders in the system yet'}
+                {statusFilter === 'all'
+                  ? 'No orders in the system yet'
+                  : `No orders with status "${ORDER_STATUS_LABELS[statusFilter]}"`}
               </p>
             </div>
           ) : (
             <>
-              {/* Responsive Table */}
+              {/* TABLE */}
               <div className="overflow-x-auto rounded-xl border border-orange-200/50">
                 <Table>
                   <TableHeader className="bg-orange-50 dark:bg-orange-950/30">
                     <TableRow>
-                      <TableHead className="font-semibold">Order ID</TableHead>
-                      <TableHead className="font-semibold">Customer</TableHead>
-                      <TableHead className="font-semibold">Status</TableHead>
-                      <TableHead className="font-semibold">Total</TableHead>
-                      <TableHead className="font-semibold">Rider</TableHead>
-                      <TableHead className="font-semibold text-right">Actions</TableHead>
+                      <TableHead>Order ID</TableHead>
+                      <TableHead>Customer</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Total</TableHead>
+                      <TableHead>Rider</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
+
                   <TableBody>
                     {data.orders.map((order) => (
-                      <TableRow
-                        key={order._id}
-                        className="hover:bg-orange-50/50 dark:hover:bg-orange-950/20 transition-colors"
-                      >
+                      <TableRow key={order._id}>
                         <TableCell className="font-medium">
                           <Link
                             to={`/admin/orders/${order._id}`}
@@ -194,92 +214,107 @@ const handleStatusChange = (
                           </Link>
                         </TableCell>
 
-                        <TableCell className="font-medium">
-                          {order.guestInfo?.name || order.customer?.name || 'Guest'}
+                        <TableCell>
+                          {order.guestInfo?.name ||
+                            order.customer?.name ||
+                            'Guest'}
                         </TableCell>
 
                         <TableCell>
                           <Badge
-                            className={`font-medium ${
-                              ORDER_STATUS_COLORS[order.status] || 'bg-gray-500'
-                            } text-white px-4 py-1.5`}
+                            className={`text-white ${
+                              ORDER_STATUS_COLORS[order.status]
+                            }`}
                           >
-                            {ORDER_STATUS_LABELS[order.status] || order.status}
+                            {ORDER_STATUS_LABELS[order.status]}
                           </Badge>
                         </TableCell>
 
-                        <TableCell className="font-medium">
-                          Rs. {order.finalAmount?.toLocaleString('en-PK') ?? '—'}
+                        <TableCell>
+                          Rs. {order.finalAmount?.toLocaleString('en-PK')}
                         </TableCell>
 
                         <TableCell>
                           {order.rider ? (
-                            <div className="flex flex-col">
-                              <span>{order.rider.name}</span>
-                              <span className="text-xs text-muted-foreground">
+                            <>
+                              <div>{order.rider.name}</div>
+                              <div className="text-xs text-muted-foreground">
                                 {order.rider.phone}
-                              </span>
-                            </div>
+                              </div>
+                            </>
                           ) : (
-                            <span className="text-muted-foreground">Not assigned</span>
+                            <span className="text-muted-foreground">
+                              Not assigned
+                            </span>
                           )}
                         </TableCell>
 
                         <TableCell className="text-right space-x-3">
-                          {/* Status Dropdown – only show allowed options */}
+                          {/* STATUS */}
                           <Select
-  disabled={updateStatus.isPending}
-  value={order.status}
-  onValueChange={(val) => handleStatusChange(order._id, val, order.status)}
->
-                            <SelectTrigger className="w-44 inline-flex">
+                            value={order.status}
+                            disabled={updateStatus.isPending}
+                            onValueChange={(val) =>
+                              handleStatusChange(
+                                order._id,
+                                val as OrderStatus,
+                                order.status
+                              )
+                            }
+                          >
+                            <SelectTrigger className="w-44">
                               <SelectValue />
+                              {updateStatus.isPending && (
+                                <Loader2 className="ml-2 h-4 w-4 animate-spin" />
+                              )}
                             </SelectTrigger>
                             <SelectContent>
                               {allowedStatuses.map((st) => (
                                 <SelectItem
                                   key={st}
                                   value={st}
-                                  disabled={order.status === st}
+                                  disabled={st === order.status}
                                 >
-                                  {ORDER_STATUS_LABELS[st] || st}
+                                  {ORDER_STATUS_LABELS[st]}
                                 </SelectItem>
                               ))}
                             </SelectContent>
                           </Select>
 
-                          {/* Rider Assignment – only visible to admin / delivery_manager */}
-{canAssignRider && !order.rider && (
-  <Select
-    disabled={assignRider.isPending || ridersLoading}
-    onValueChange={(riderId) => handleAssignRider(order._id, riderId)}
-  >
-    <SelectTrigger className="w-48 inline-flex">
-      <SelectValue
-        placeholder={
-          ridersLoading ? 'Loading riders...' : 
-          riders.length === 0 ? 'No available riders' : 
-          'Assign Rider'
-        }
-      />
-    </SelectTrigger>
-    <SelectContent>
-      {riders.length > 0 ? (
-        riders.map((rider) => (
-          <SelectItem key={rider._id} value={rider._id}>
-            {rider.name} ({rider.phone.slice(-10)}) 
-            {rider.isOnline ? ' 🟢' : ' ⚫'} 
-            {rider.rating ? `★${rider.rating.toFixed(1)}` : ''}
-          </SelectItem>
-        ))
-      ) : !ridersLoading ? (
-        <SelectItem value="none" disabled>No available riders online</SelectItem>
-      ) : (
-        <SelectItem value="none" disabled>Loading...</SelectItem>
-      )}
-    </SelectContent>
-  </Select>
-)}
+                          {/* ASSIGN RIDER */}
+                          {canAssignRider && !order.rider && (
+                            <Select
+                              disabled={
+                                assignRider.isPending || ridersLoading
+                              }
+                              onValueChange={(id) =>
+                                handleAssignRider(order._id, id)
+                              }
+                            >
+                              <SelectTrigger className="w-48">
+                                <SelectValue
+                                  placeholder={
+                                    ridersLoading
+                                      ? 'Loading riders...'
+                                      : riders.length === 0
+                                      ? 'No riders available'
+                                      : 'Assign rider'
+                                  }
+                                />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {riders.map((r) => (
+                                  <SelectItem
+                                    key={r._id}
+                                    value={r._id}
+                                  >
+                                    {r.name} ({r.phone.slice(-10)}){' '}
+                                    {r.isOnline ? '🟢' : '⚫'}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          )}
                         </TableCell>
                       </TableRow>
                     ))}
@@ -287,21 +322,21 @@ const handleStatusChange = (
                 </Table>
               </div>
 
-              {/* Pagination & Summary */}
-              <div className="flex flex-col sm:flex-row justify-between items-center gap-6 mt-8">
+              {/* PAGINATION */}
+              <div className="flex justify-between items-center mt-8">
                 <p className="text-sm text-muted-foreground">
                   Showing {(page - 1) * ITEMS_PER_PAGE + 1}–
-                  {Math.min(page * ITEMS_PER_PAGE, data?.pagination?.total || 0)} of{' '}
-                  {data?.pagination?.total || 0} orders
+                  {Math.min(page * ITEMS_PER_PAGE, totalOrders)} of{' '}
+                  {totalOrders}
                 </p>
 
                 {totalPages > 1 && (
-                  <div className="flex items-center gap-3">
+                  <div className="flex gap-3">
                     <Button
-                      variant="outline"
                       size="sm"
+                      variant="outline"
                       disabled={page === 1}
-                      onClick={() => setPage((p) => Math.max(1, p - 1))}
+                      onClick={() => setPage((p) => p - 1)}
                     >
                       Previous
                     </Button>
@@ -309,10 +344,10 @@ const handleStatusChange = (
                       Page {page} of {totalPages}
                     </span>
                     <Button
-                      variant="outline"
                       size="sm"
+                      variant="outline"
                       disabled={page === totalPages}
-                      onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                      onClick={() => setPage((p) => p + 1)}
                     >
                       Next
                     </Button>

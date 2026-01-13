@@ -1,151 +1,205 @@
-// src/features/riders/components/RiderDashboard.tsx
-'use client';
+// src/features/riders/components/CurrentOrderCard.tsx
+// PRODUCTION-READY — JANUARY 2026
+// Live order card for riders: shows current order details, status, items, and rider info
+// Uses live tracking via useTrackOrder
 
-import { useEffect } from 'react';
-import { useNavigate } from 'react-router-dom'; // ← correct import for React Router v6+
-import { Loader2, MapPin, History, Wallet, Star } from 'lucide-react';
-
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useEffect, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
+import { Skeleton } from '@/components/ui/skeleton';
+import { toast } from 'sonner';
 
-import { useRider } from '../context/RiderContext';
-import { useCurrentOrder } from '../hooks/useRiders'; // ← assuming correct hook name
-import { StatusToggle } from './StatusToggle';
-import CurrentOrderCard from './CurrentOrderCard';
+import {
+  CheckCircle2,
+  Clock,
+  ChefHat,
+  Truck,
+  Package,
+  XCircle,
+  MapPin,
+  Phone,
+} from 'lucide-react';
 
-export default function RiderDashboard() {
-  const { profile, isLoading: profileLoading, isError } = useRider();
-  const { data: currentOrder, isLoading: orderLoading } = useCurrentOrder();
-  const navigate = useNavigate(); // ← replacement for useRouter
+import { useTrackOrder } from '@/features/orders/hooks/useOrders';
+import { ORDER_STATUS_LABELS, ORDER_STATUS_COLORS, OrderStatus } from '@/types/order.types';
 
-  // Optional: background location tracking
-  useEffect(() => {
-    if (!profile?.isAvailable) return;
-
-    let watchId: number | null = null;
-
-    if ('geolocation' in navigator) {
-      watchId = navigator.geolocation.watchPosition(
-        (position) => {
-          console.log('Background location:', position.coords.latitude, position.coords.longitude);
-          // In real app → call useUpdateLocation().mutate({ lat, lng })
-        },
-        (err) => console.error('Geolocation error:', err),
-        { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
-      );
-    }
-
-    return () => {
-      if (watchId !== null) navigator.geolocation.clearWatch(watchId);
-    };
-  }, [profile?.isAvailable]);
-
-  if (profileLoading || orderLoading) {
-    return (
-      <div className="flex min-h-[70vh] items-center justify-center">
-        <Loader2 className="h-12 w-12 animate-spin text-primary" />
-      </div>
-    );
-  }
-
-  if (isError || !profile) {
-    return (
-      <div className="p-8 text-center text-muted-foreground">
-        Failed to load rider information. Please try again later.
-      </div>
-    );
-  }
-
-  const isApproved = profile.riderStatus === 'approved';
-
-  return (
-    <div className="min-h-screen bg-background pb-24">
-      {/* Sticky Header */}
-      <div className="sticky top-0 z-20 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 border-b">
-        <div className="container flex items-center justify-between h-16 px-4">
-          <div>
-            <h1 className="text-xl font-bold tracking-tight">Rider Dashboard</h1>
-            <p className="text-sm text-muted-foreground">
-              {profile.name} • {profile.phone}
-            </p>
-          </div>
-          <StatusToggle />
-        </div>
-      </div>
-
-      <main className="container px-4 py-6 space-y-6">
-        {currentOrder ? (
-          <CurrentOrderCard order={currentOrder} />
-        ) : (
-          <Card className="border-dashed">
-            <CardContent className="flex flex-col items-center justify-center py-12 text-center">
-              <MapPin className="h-12 w-12 text-muted-foreground/50 mb-4" />
-              <h3 className="text-lg font-medium">No Active Delivery</h3>
-              <p className="text-sm text-muted-foreground mt-2 max-w-xs">
-                {profile.isAvailable
-                  ? "You're online and ready for new orders"
-                  : 'Turn on availability to start receiving orders'}
-              </p>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Quick Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <StatCard icon={<Wallet className="h-5 w-5" />} title="Earnings" value={`PKR ${profile.earnings.toLocaleString()}`} />
-          <StatCard icon={<Star className="h-5 w-5" />} title="Rating" value={profile.rating.toFixed(1)} />
-          <StatCard icon={<MapPin className="h-5 w-5" />} title="Deliveries" value={profile.totalDeliveries.toString()} />
-          <StatCard
-            icon={<Badge variant={profile.isAvailable ? 'default' : 'secondary'} className="h-5 w-5" />}
-            title="Status"
-            value={profile.isAvailable ? 'Online' : 'Offline'}
-          />
-        </div>
-
-        {/* Quick Actions */}
-        <div className="grid grid-cols-2 gap-4">
-          <Button
-            variant="outline"
-            size="lg"
-            className="h-28 flex flex-col gap-2"
-            onClick={() => navigate('/rider/orders')} // ← use navigate
-          >
-            <History className="h-6 w-6" />
-            <span>Order History</span>
-          </Button>
-
-          {!isApproved && (
-            <Button
-              variant="default"
-              size="lg"
-              className="h-28 flex flex-col gap-2 bg-gradient-to-r from-primary to-primary/90"
-              onClick={() => navigate('/rider/apply')} // ← use navigate
-            >
-              Become a Rider
-            </Button>
-          )}
-        </div>
-      </main>
-    </div>
-  );
+interface CurrentOrderCardProps {
+  orderId: string;
 }
 
-function StatCard({
-  icon,
-  title,
-  value,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  value: string;
-}) {
+const STEPS = [
+  { status: 'pending', icon: Clock, label: 'Received' },
+  { status: 'confirmed', icon: CheckCircle2, label: 'Confirmed' },
+  { status: 'preparing', icon: ChefHat, label: 'Preparing' },
+  { status: 'out_for_delivery', icon: Truck, label: 'On the Way' },
+  { status: 'delivered', icon: Package, label: 'Delivered' },
+] as const;
+
+const formatPrice = (amount: number | undefined) =>
+  typeof amount === 'number' && !isNaN(amount) ? amount.toLocaleString('en-PK') : '0';
+
+export default function CurrentOrderCard({ orderId }: CurrentOrderCardProps) {
+  const { data: response, isLoading, error } = useTrackOrder(orderId);
+  const order = response?.order;
+
+  const currentStepIndex = useMemo(
+    () => STEPS.findIndex((s) => s.status === order?.status),
+    [order?.status]
+  );
+
+  const isDelivered = order?.status === 'delivered';
+  const isCancelled = order?.status === 'cancelled' || order?.status === 'rejected';
+
+  if (isLoading || !order) {
+    return (
+      <Card className="w-full shadow-lg p-6">
+        <Skeleton className="h-24 rounded-xl mb-6" />
+        <Skeleton className="h-12 rounded-lg mb-4" />
+        <Skeleton className="h-40 rounded-2xl" />
+      </Card>
+    );
+  }
+
+  if (error) {
+    return (
+      <Card className="w-full shadow-lg p-6 border-red-200">
+        <CardHeader>
+          <CardTitle className="text-xl text-red-600">Failed to load order</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-muted-foreground">
+            There was a problem fetching this order. Please try again later.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
-    <Card>
-      <CardContent className="p-4 flex flex-col items-center justify-center text-center h-full">
-        <div className="rounded-full bg-primary/10 p-3 mb-3">{icon}</div>
-        <p className="text-sm text-muted-foreground">{title}</p>
-        <p className="text-xl font-bold mt-1">{value}</p>
+    <Card className="w-full shadow-2xl border-orange-200">
+      <CardHeader className="bg-gradient-to-r from-orange-50 to-amber-50">
+        <CardTitle className="text-2xl flex items-center justify-between">
+          Order #{order.shortId || order._id.slice(-6).toUpperCase()}
+          <Badge
+            className={`text-lg px-4 py-2 font-semibold ${ORDER_STATUS_COLORS[order.status as OrderStatus]}`}
+          >
+            {ORDER_STATUS_LABELS[order.status as OrderStatus] || 'Processing'}
+          </Badge>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="p-6 space-y-6">
+        {/* Progress Timeline */}
+        <div className="relative mb-6">
+          <div className="absolute top-10 left-0 right-0 h-2 bg-orange-100 rounded-full -z-10" />
+          <div
+            className="absolute top-10 left-0 h-2 bg-gradient-to-r from-orange-500 to-amber-500 rounded-full transition-all duration-700"
+            style={{ width: `${(currentStepIndex / (STEPS.length - 1)) * 100}%` }}
+          />
+          <div className="grid grid-cols-5 gap-4">
+            {STEPS.map((step, i) => {
+              const Icon = step.icon;
+              const isActive = i <= currentStepIndex;
+              const isCompleted = i < currentStepIndex;
+
+              return (
+                <div key={step.status} className="flex flex-col items-center relative">
+                  <div
+                    className={`w-16 h-16 rounded-full flex items-center justify-center shadow-xl transition-all duration-700 ${
+                      isCompleted
+                        ? 'bg-green-500 text-white scale-105'
+                        : isActive
+                        ? 'bg-orange-600 text-white scale-110 ring-4 ring-orange-300/50 animate-pulse'
+                        : 'bg-gray-200 text-gray-500'
+                    }`}
+                  >
+                    <Icon className="h-7 w-7" />
+                  </div>
+                  <p
+                    className={`mt-2 text-sm text-center ${
+                      isActive || isCompleted ? 'text-foreground font-semibold' : 'text-muted-foreground'
+                    }`}
+                  >
+                    {step.label}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Order Items */}
+        <div className="space-y-4">
+          {order.items.map((item, idx) => (
+            <div key={item._id || idx} className="flex justify-between items-center">
+              <div>
+                <p className="font-semibold">{item.menuItem?.name || item.name || 'Item Unavailable'}</p>
+                {item.addOns?.length > 0 && (
+                  <p className="text-sm text-muted-foreground">
+                    + {item.addOns.map((a) => a.name).join(', ')}
+                  </p>
+                )}
+              </div>
+              <p className="font-semibold">Rs. {formatPrice((item.priceAtOrder ?? 0) * item.quantity)}</p>
+            </div>
+          ))}
+        </div>
+
+        <Separator />
+
+        {/* Totals */}
+        <div className="space-y-2 text-lg">
+          <div className="flex justify-between">
+            <span>Subtotal</span>
+            <span>Rs. {formatPrice(order.totals?.totalAmount)}</span>
+          </div>
+          <div className="flex justify-between">
+            <span>Delivery Fee</span>
+            <span>Rs. {formatPrice(order.totals?.deliveryFee)}</span>
+          </div>
+          {order.totals?.discountApplied > 0 && (
+            <div className="flex justify-between text-green-600 font-semibold">
+              <span>Discount</span>
+              <span>-Rs. {formatPrice(order.totals.discountApplied)}</span>
+            </div>
+          )}
+          {order.totals?.walletUsed > 0 && (
+            <div className="flex justify-between text-blue-600 font-semibold">
+              <span>Wallet Used</span>
+              <span>-Rs. {formatPrice(order.totals.walletUsed)}</span>
+            </div>
+          )}
+          <Separator className="my-2" />
+          <div className="flex justify-between text-2xl font-bold">
+            <span>Total Paid</span>
+            <span className="text-rose-600">Rs. {formatPrice(order.totals?.finalAmount)}</span>
+          </div>
+        </div>
+
+        {/* Rider Info */}
+        {order.rider && (
+          <div className="mt-6 flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className="w-16 h-16 rounded-full bg-gradient-to-br from-orange-500 to-amber-600 flex items-center justify-center shadow-lg">
+                <Truck className="h-8 w-8 text-white" />
+              </div>
+              <div>
+                <p className="text-lg font-bold">{order.rider.name}</p>
+                <p className="text-sm text-muted-foreground">Delivery Partner</p>
+              </div>
+            </div>
+            <Button
+              size="sm"
+              className="h-10 px-4 bg-green-600 hover:bg-green-700 text-white"
+              asChild
+            >
+              <a href={`tel:${order.rider.phone}`}>
+                <Phone className="mr-2 h-5 w-5" /> Call
+              </a>
+            </Button>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
