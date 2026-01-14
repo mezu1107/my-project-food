@@ -10,110 +10,143 @@ import type {
   AdminRider,
   RiderStats,
 } from '../types/adminRider.types';
-import type { RiderDocuments } from '../types/rider.types'; // If used in promote mutation
+import type { RiderDocuments } from '../types/rider.types';
 
 // =============================
 // QUERIES
 // =============================
 
+/**
+ * Fetch paginated list of riders with optional search & status filter
+ */
 export function useAdminRiders(params?: {
   search?: string;
   status?: 'all' | 'pending' | 'approved' | 'rejected';
   page?: number;
   limit?: number;
 }) {
-  return useQuery({
+  return useQuery<AdminRidersResponse, Error>({
     queryKey: ['admin', 'riders', 'list', params],
-    queryFn: async () => {
-      return await apiClient.get<AdminRidersResponse>('/admin/rider', {
+    queryFn: () =>
+      apiClient.get<AdminRidersResponse>('/admin/rider', {
         params: {
           search: params?.search?.trim() || undefined,
           status: params?.status === 'all' ? undefined : params?.status,
           page: params?.page ?? 1,
           limit: params?.limit ?? 20,
         },
-      });
-      // ← No .data needed — apiClient already returns res.data
-    },
-    staleTime: 2 * 60 * 1000,
+      }),
+    staleTime: 2 * 60 * 1000, // 2 minutes - good balance for list view
+    gcTime: 10 * 60 * 1000,
   });
 }
 
+/**
+ * Get aggregated rider statistics for dashboard
+ */
 export function useRiderStats() {
-  return useQuery({
+  return useQuery<RiderStats, Error>({
     queryKey: ['admin', 'riders', 'stats'],
     queryFn: async () => {
-      const response = await apiClient.get<RiderStatsResponse>('/admin/rider/stats');
-      return response.stats;
+      const { stats } = await apiClient.get<RiderStatsResponse>('/admin/rider/stats');
+      return stats;
     },
-    staleTime: 5 * 60 * 1000,
+    staleTime: 5 * 60 * 1000, // 5 minutes - stats don't change very frequently
+    gcTime: 15 * 60 * 1000,
   });
 }
 
+/**
+ * Get detailed information about a single rider
+ */
 export function useAdminRider(id: string | undefined) {
-  return useQuery({
+  return useQuery<AdminRider, Error>({
     queryKey: ['admin', 'rider', id],
     enabled: !!id,
     queryFn: async () => {
-      const response = await apiClient.get<SingleRiderResponse>(`/admin/rider/${id}`);
-      return response.rider;
+      const { rider } = await apiClient.get<SingleRiderResponse>(`/admin/rider/${id}`);
+      return rider;
     },
+    staleTime: 4 * 60 * 1000, // Slightly longer cache - detailed view changes less often
   });
 }
 
+/**
+ * Get list of currently blocked riders
+ */
 export function useBlockedRiders(page = 1, limit = 20) {
-  return useQuery({
+  return useQuery<AdminRidersResponse, Error>({
     queryKey: ['admin', 'riders', 'blocked', { page, limit }],
-    queryFn: async () => {
-      return await apiClient.get<AdminRidersResponse>('/admin/rider/blocked', {
+    queryFn: () =>
+      apiClient.get<AdminRidersResponse>('/admin/rider/blocked', {
         params: { page, limit },
-      });
-    },
+      }),
+    staleTime: 90 * 1000, // Blocked list changes infrequently
   });
 }
 
+/**
+ * Get list of permanently banned riders
+ */
 export function usePermanentlyBannedRiders(page = 1, limit = 20) {
-  return useQuery({
-    queryKey: ['admin', 'riders', 'banned', { page, limit }],
-    queryFn: async () => {
-      return await apiClient.get<AdminRidersResponse>('/admin/rider/permanently-banned', {
+  return useQuery<AdminRidersResponse, Error>({
+    queryKey: ['admin', 'riders', 'permanently-banned', { page, limit }],
+    queryFn: () =>
+      apiClient.get<AdminRidersResponse>('/admin/rider/permanently-banned', {
         params: { page, limit },
-      });
-    },
+      }),
+    staleTime: 120 * 1000, // Banned list almost never changes
   });
 }
 
-export function useAvailableRidersForAssignment(params: { area?: string; page?: number; limit?: number } = {}) {
-  return useQuery({
+/**
+ * Get currently available riders — critical for manual order assignment
+ * Very frequent refetching because availability changes constantly
+ */
+export function useAvailableRidersForAssignment(params: {
+  area?: string;
+  page?: number;
+  limit?: number;
+} = {}) {
+  return useQuery<AdminRider[], Error>({
     queryKey: ['admin', 'riders', 'available', params],
     queryFn: async () => {
       const response = await apiClient.get<AdminRidersResponse>('/admin/rider/available', {
         params: {
           area: params.area || undefined,
           page: params.page ?? 1,
-          limit: params.limit ?? 50, // Higher limit for assignment dropdown
+          limit: params.limit ?? 50,
         },
       });
-      return response.riders; // Return just riders array
+      return response.riders;
     },
-    staleTime: 60 * 1000, // 1min - real-time critical
-    refetchInterval: 30 * 1000, // Auto-refresh every 30s
-    placeholderData: [],
+    staleTime: 45 * 1000,           // 45 seconds - freshness vs server load balance
+    gcTime: 5 * 60 * 1000,
+    refetchInterval: 25 * 1000,     // Every 25 seconds - good for assignment screen
+    refetchOnWindowFocus: true,     // Very useful in admin panel
+    placeholderData: () => [],      // Prevents layout shift / flicker
   });
 }
+
 // =============================
 // MUTATIONS
 // =============================
 
 export function useUpdateRiderStatus() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async ({ id, riderStatus }: { id: string; riderStatus: 'pending' | 'approved' | 'rejected' }) => {
-      return await apiClient.patch<AdminActionResponse>(`/admin/rider/${id}/status`, { riderStatus });
-    },
+  const queryClient = useQueryClient();
+
+  return useMutation<
+    AdminActionResponse,
+    Error,
+    { id: string; riderStatus: 'pending' | 'approved' | 'rejected' }
+  >({
+    mutationFn: ({ id, riderStatus }) =>
+      apiClient.patch<AdminActionResponse>(`/admin/rider/${id}/status`, { riderStatus }),
+
     onSuccess: (data) => {
-      qc.invalidateQueries({ queryKey: ['admin', 'riders'] });
-      qc.invalidateQueries({ queryKey: ['admin', 'rider'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'riders'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'rider'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'riders', 'stats'] });
       toast.success(data.message);
     },
     onError: () => toast.error('Failed to update rider status'),
@@ -121,122 +154,173 @@ export function useUpdateRiderStatus() {
 }
 
 export function useApproveRider() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async (id: string) => {
-      return await apiClient.patch<AdminActionResponse>(`/admin/rider/${id}/approve`);
-    },
+  const queryClient = useQueryClient();
+
+  return useMutation<AdminActionResponse, Error, string>({
+    mutationFn: (id) => apiClient.patch<AdminActionResponse>(`/admin/rider/${id}/approve`),
+
     onSuccess: (data) => {
-      qc.invalidateQueries({ queryKey: ['admin', 'riders'] });
-      toast.success(data.message);
+      queryClient.invalidateQueries({ queryKey: ['admin', 'riders'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'riders', 'stats'] });
+      toast.success(data.message || 'Rider approved successfully');
     },
+    onError: () => toast.error('Failed to approve rider'),
   });
 }
 
 export function useRejectRider() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async ({ id, reason }: { id: string; reason: string }) => {
-      return await apiClient.patch<AdminActionResponse>(`/admin/rider/${id}/reject`, { reason });
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['admin', 'riders'] });
-      toast.success('Application rejected');
+  const queryClient = useQueryClient();
+
+  return useMutation<AdminActionResponse, Error, { id: string; reason: string }>({
+    mutationFn: ({ id, reason }) =>
+      apiClient.patch<AdminActionResponse>(`/admin/rider/${id}/reject`, { reason }),
+
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'riders'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'riders', 'stats'] });
+      toast.success(data.message || 'Application rejected successfully');
     },
     onError: () => toast.error('Failed to reject application'),
   });
 }
 
 export function usePromoteToRider() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async ({ id, riderDocuments }: { id: string; riderDocuments?: Partial<RiderDocuments> }) => {
-      return await apiClient.post<AdminActionResponse>(`/admin/rider/${id}/promote-to-rider`, riderDocuments || {});
+  const queryClient = useQueryClient();
+
+  return useMutation<
+    AdminActionResponse,
+    Error,
+    { id: string; riderDocuments?: Partial<RiderDocuments> }
+  >({
+    mutationFn: ({ id, riderDocuments }) =>
+      apiClient.post<AdminActionResponse>(`/admin/rider/${id}/promote-to-rider`, riderDocuments ?? {}),
+
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'riders'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'riders', 'stats'] });
+      toast.success(data.message || 'User successfully promoted to rider');
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['admin', 'riders'] });
-      toast.success('User promoted to rider');
-    },
+    onError: () => toast.error('Failed to promote user to rider'),
   });
 }
 
 export function useBlockRider() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async ({ id, reason }: { id: string; reason: string }) => {
-      return await apiClient.patch<AdminActionResponse>(`/admin/rider/${id}/block`, { reason });
+  const queryClient = useQueryClient();
+
+  return useMutation<AdminActionResponse, Error, { id: string; reason: string }>({
+    mutationFn: ({ id, reason }) =>
+      apiClient.patch<AdminActionResponse>(`/admin/rider/${id}/block`, { reason }),
+
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'riders'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'riders', 'blocked'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'riders', 'stats'] });
+      toast.success(data.message || 'Rider blocked successfully');
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['admin', 'riders'] });
-      toast.success('Rider blocked');
-    },
+    onError: () => toast.error('Failed to block rider'),
   });
 }
 
 export function useUnblockRider() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async (id: string) => {
-      return await apiClient.patch<AdminActionResponse>(`/admin/rider/${id}/unblock`);
+  const queryClient = useQueryClient();
+
+  return useMutation<AdminActionResponse, Error, string>({
+    mutationFn: (id) => apiClient.patch<AdminActionResponse>(`/admin/rider/${id}/unblock`),
+
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'riders'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'riders', 'blocked'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'riders', 'stats'] });
+      toast.success(data.message || 'Rider unblocked successfully');
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['admin', 'riders'] });
-      qc.invalidateQueries({ queryKey: ['admin', 'riders', 'blocked'] });
-      toast.success('Rider unblocked');
-    },
+    onError: () => toast.error('Failed to unblock rider'),
   });
 }
 
 export function useSoftDeleteRider() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async (id: string) => {
-      return await apiClient.delete<AdminActionResponse>(`/admin/rider/${id}/soft-delete`);
+  const queryClient = useQueryClient();
+
+  return useMutation<AdminActionResponse, Error, string>({
+    mutationFn: (id) => apiClient.delete<AdminActionResponse>(`/admin/rider/${id}/soft-delete`),
+
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'riders'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'riders', 'stats'] });
+      toast.success(data.message || 'Rider account soft-deleted');
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['admin', 'riders'] });
-      toast.success('Rider soft-deleted');
-    },
+    onError: () => toast.error('Failed to soft-delete rider'),
   });
 }
 
 export function useRestoreRider() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async (id: string) => {
-      return await apiClient.patch<AdminActionResponse>(`/admin/rider/${id}/restore`);
+  const queryClient = useQueryClient();
+
+  return useMutation<AdminActionResponse, Error, string>({
+    mutationFn: (id) => apiClient.patch<AdminActionResponse>(`/admin/rider/${id}/restore`),
+
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'riders'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'riders', 'stats'] });
+      toast.success(data.message || 'Rider account restored');
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['admin', 'riders'] });
-      toast.success('Rider restored');
-    },
+    onError: () => toast.error('Failed to restore rider'),
   });
 }
 
 export function usePermanentlyBanRider() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async ({ id, reason }: { id: string; reason: string }) => {
-      return await apiClient.post<AdminActionResponse>(`/admin/rider/${id}/permanent-ban`, { reason });
+  const queryClient = useQueryClient();
+
+  return useMutation<AdminActionResponse, Error, { id: string; reason: string }>({
+    mutationFn: ({ id, reason }) =>
+      apiClient.post<AdminActionResponse>(`/admin/rider/${id}/permanent-ban`, { reason }),
+
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'riders'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'riders', 'permanently-banned'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'riders', 'stats'] });
+      toast.success(data.message || 'Rider has been permanently banned');
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['admin', 'riders'] });
-      qc.invalidateQueries({ queryKey: ['admin', 'riders', 'banned'] });
-      toast.success('Rider permanently banned');
-    },
+    onError: () => toast.error('Failed to permanently ban rider'),
   });
 }
 
+/**
+ * Admin force-assign rider to an order (with forced availability support)
+ */
 export function useAdminAssignRider() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async ({ orderId, riderId }: { orderId: string; riderId: string }) => {
-      return await apiClient.patch<AdminActionResponse>(`/admin/rider/${orderId}/assign-rider`, { riderId });
-    },
+  const queryClient = useQueryClient();
+
+  return useMutation<
+    AdminActionResponse,
+    Error,
+    { orderId: string; riderId: string }
+  >({
+    mutationFn: ({ orderId, riderId }) =>
+      apiClient.patch<AdminActionResponse>(`/admin/rider/${orderId}/assign-rider`, { riderId }),
+
     onSuccess: (data) => {
-      qc.invalidateQueries({ queryKey: ['admin', 'orders'] });
-      toast.success(data.forcedOnline ? 'Rider assigned (forced online)' : 'Rider assigned');
+      queryClient.invalidateQueries({ queryKey: ['admin', 'orders'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'riders', 'available'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'riders', 'stats'] });
+
+      toast.success(
+        data.forcedAvailable
+          ? 'Rider assigned (was forced available)'
+          : 'Rider assigned successfully',
+        {
+          description: data.forcedAvailable
+            ? 'Rider was automatically set to available for this order'
+            : undefined,
+          duration: data.forcedAvailable ? 6000 : 4000,
+        }
+      );
     },
-    onError: () => toast.error('Failed to assign rider'),
+
+    onError: (err: any) => {
+      toast.error(
+        err?.response?.data?.message || 'Failed to assign rider to order',
+        { duration: 7000 }
+      );
+    },
   });
 }

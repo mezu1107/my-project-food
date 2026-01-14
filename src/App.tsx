@@ -101,7 +101,13 @@ import RiderHome from "@/features/riders/pages/RiderHome";
 import RiderProfile from "@/features/riders/pages/RiderProfile";
 import OrderHistory from "@/features/riders/pages/OrderHistory";
 import ApplyRider from "@/features/riders/pages/ApplyRider";
+import PromoteToRiderPage from "@/features/riders/admin/pages/PromoteToRiderPage";
 
+import RiderListPage from "@/features/riders/admin/pages/RiderListPage";
+import RiderDetailPage from "@/features/riders/admin/pages/RiderDetailPage";
+import BlockedRidersPage from "@/features/riders/admin/pages/BlockedRidersPage";
+import PermanentlyBannedRidersPage from "@/features/riders/admin/pages/PermanentlyBannedRidersPage";
+import ForceAssignRiderPage from "@/features/riders/admin/pages/ForceAssignRiderPage";
 // ── Query Client ──
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -167,6 +173,18 @@ const router = createBrowserRouter([
       { path: "inventory", element: <InventoryList /> },
       { path: "analytics", element: <AnalyticsPage /> },
       { path: "reviews", element: <AdminReviewsDashboard /> },
+      {
+        path: "riders",
+        children: [
+          { index: true, element: <RiderListPage /> },                    // /admin/riders
+          { path: ":id", element: <RiderDetailPage /> },                 // /admin/riders/:id
+          { path: "blocked", element: <BlockedRidersPage /> },           // /admin/riders/blocked
+          { path: "permanently-banned", element: <PermanentlyBannedRidersPage /> }, // /admin/riders/permanently-banned
+          { path: "assign", element: <ForceAssignRiderPage /> },         // /admin/riders/assign  (or keep /admin/orders/assign if preferred)
+          // In router children under /admin/riders
+          { path: "promote", element: <PromoteToRiderPage /> },
+        ],
+      },
     ],
   },
   {
@@ -177,20 +195,20 @@ const router = createBrowserRouter([
       { path: "display", element: <KitchenDisplay /> },
     ],
   },
- {
-  path: "/rider",
-  element: (
-    <RiderProvider>
-      <RiderLayout />
-    </RiderProvider>
-  ),
-  children: [
-    { index: true, element: <RiderHome /> },
-    { path: "profile", element: <RiderProfile /> },
-    { path: "orders", element: <OrderHistory /> },
-    { path: "apply", element: <ApplyRider /> },
-  ],
-},
+  {
+    path: "/rider",
+    element: (
+      <RiderProvider>
+        <RiderLayout />
+      </RiderProvider>
+    ),
+    children: [
+      { index: true, element: <RiderHome /> },
+      { path: "profile", element: <RiderProfile /> },
+      { path: "orders", element: <OrderHistory /> },
+      { path: "apply", element: <ApplyRider /> },
+    ],
+  },
   {
     path: "*",
     element: <NotFound />,
